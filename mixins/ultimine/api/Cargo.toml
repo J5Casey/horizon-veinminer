@@ -1,6 +1,6 @@
 [package]
 name = "mod-ultimine"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 license = "MIT"
 description = "Ultimine-style vein mining for Horizon: the trait mod"
@@ -10,16 +10,16 @@ publish = false
 path = "src/lib.rs"
 
 [features]
-# The one engine call Ultimine needs that Horizon hasn't merged yet:
-# `Host::player_break_block` (horizon-rust/horizon#12195). Once it is in the
-# pinned Horizon, make this the default (`default = ["player-break"]`) and the
-# interim break path in src/player_break.rs can go.
-default = []
+# Breaking as the player through `Host::player_break_block`
+# (horizon-rust/horizon#12259, not merged yet: the bundle pins a Horizon commit
+# that has it). Turning it off builds the interim break path in
+# src/player_break.rs, for a Horizon without the helper.
+default = ["player-break"]
 player-break = []
 
 [dependencies]
 # The launcher points this at the Horizon source it builds the game from. Any
 # other dependency must be a crate and version in Horizon's Cargo.lock.
-horizon-client = { git = "https://github.com/horizon-rust/horizon", rev = "36584650eaeec33553d41c4551a5b38b4a6cd0d7" }
+horizon-client = { git = "https://github.com/horizon-rust/horizon", rev = "aa13a463daa10939b4e537a4b9dcca8c18da240f" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

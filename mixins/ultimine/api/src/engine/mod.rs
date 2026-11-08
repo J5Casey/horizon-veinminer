@@ -12,6 +12,7 @@ pub mod geom;
 pub mod matcher;
 pub mod page;
 pub mod protocol;
+pub mod reentry;
 pub mod rightclick;
 pub mod select;
 pub mod server;

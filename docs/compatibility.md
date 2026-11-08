@@ -40,15 +40,24 @@ Helpers still in pending fragments (no API number yet): `sneaking` and
 `block_name_in_tag` (`host_bridge`), `player_food` and `set_player_status`
 (`player_status`), `default_state` (`default_state`), and for the interim break
 `equipment` (`host_bridge`) and `destroy_block` (`machine_breaking`); with
-`player-break`, `player_break_block` (`player_break`, unmerged).
+`player-break` (the default), `player_break_block` (`player_break`,
+horizon-rust/horizon#12259, unmerged).
 
-So the bundle pins `horizon_revision` (Horizon main `3658465`). Once those
-fragments are stamped and `player_break` is merged: turn on `player-break`,
-remove the pin from `horizon-mixin.toml` and the api crate's `rev`, and add
-`"hooks": <the API that stamps the last of them>` to `horizon-native.json` in
-`tools/package.py`.
+So the bundle pins `horizon_revision` to `aa13a46`, J5Casey/horizon
+`braid/dev`: Horizon with #12259 (and the Braid pack's other unmerged engine
+work, so every Braid mod builds on one commit). Once those fragments are
+stamped and #12259 is merged: remove the pin from `horizon-mixin.toml` and the
+api crate's `rev`, and add `"hooks": <the API that stamps the last of them>` to
+`horizon-native.json` in `tools/package.py`.
+
+`player_break_block` fires `destroy_block` again for each block it breaks, as
+any player's break does. Ultimine holds a guard (`engine/reentry.rs`) while it
+breaks, so those nested hooks pass the break through and never start another
+Ultimine use (`tests/reentry.rs`).
 
 ## Not yet validated
 
-The engine is unit-tested and the trait mod type-checks against Horizon main
-and the `braid/player-break` branch; no in-game session has been run yet.
+The engine is unit-tested and the trait mod type-checks against the pinned
+commit. In game (offscreen, single player, survival, `aa13a46` dev build): see
+the 0.4.1 notes in the commit that re-pinned it. LAN guests and dedicated
+servers run the same server code but were not tried.

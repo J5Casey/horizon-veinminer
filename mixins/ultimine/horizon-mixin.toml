@@ -4,10 +4,10 @@
 # (see docs/compatibility.md).
 [mod]
 id = "ultimine"
-version = "0.4.0"
+version = "0.4.1"
 
 [compatibility]
-horizon_revision = "36584650eaeec33553d41c4551a5b38b4a6cd0d7"
+horizon_revision = "aa13a463daa10939b4e537a4b9dcca8c18da240f"
 
 [api]
 path = "api"

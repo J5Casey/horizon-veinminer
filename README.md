@@ -32,7 +32,7 @@ that will break are outlined, and an overlay names the shape and the count.
 The mod is the bundle in [`mixins/ultimine/`](mixins/ultimine). Package it:
 
 ```sh
-python3 tools/package.py   # writes target/ultimine-0.4.0.hnmod
+python3 tools/package.py   # writes target/ultimine-0.4.1.hnmod
 ```
 
 Install the `.hnmod` with a launcher that supports native mods (Settings > Game >

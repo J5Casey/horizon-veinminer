@@ -62,9 +62,10 @@ server hooks check it before taking their lock.
 Breaking "as the player" (their checks, the hook, loot for the held tool, tool
 wear, statistics, exhaustion, experience, optionally into the inventory) is
 `Host::player_break_block(uuid, pos, into_inventory)`, which is being added to
-Horizon (horizon-rust/horizon#12195, branch `braid/player-break`). Until it is
-merged the crate's default build uses an interim break
+Horizon (horizon-rust/horizon#12259). The api crate's default feature
+`player-break` uses it; without the feature it builds an interim break
 (`Host::destroy_block`, a machine break with the held tool's loot: no tool wear,
-statistics or drops-to-inventory). The switch is one line: make `player-break`
-the api crate's default feature. Both builds are type-checked
-(`tools/check_api.py`, with and without `--features player-break`).
+statistics or drops-to-inventory) for a Horizon that lacks the helper.
+`player_break_block` fires `destroy_block` for each block it breaks, so Ultimine
+holds `engine::reentry::Guard` while it breaks and its hooks pass those breaks
+through.

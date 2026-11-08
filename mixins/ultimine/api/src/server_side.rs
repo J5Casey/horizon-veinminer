@@ -8,7 +8,6 @@ use crate::engine::select::select;
 use crate::engine::server::{Actor, GameMode, Server, execute};
 use crate::world::{HostBreaker, HostFarmer, HostTags, HostWorld};
 use horizon_client::mod_api::Host;
-use std::cell::Cell;
 use std::collections::BTreeMap;
 
 /// The setting (file) holding the server's rules, as JSON.
@@ -16,29 +15,12 @@ pub const RULES_KEY: &str = "rules";
 /// Ticks between checks of the rules file for changes.
 const RELOAD_EVERY: u64 = 40;
 
-thread_local! {
-    /// Set while Ultimine itself breaks blocks: the breaks it makes reach
-    /// `destroy_block` again and must not start another Ultimine use.
-    static BREAKING: Cell<bool> = const { Cell::new(false) };
-}
-
-struct Breaking;
-impl Breaking {
-    fn start() -> Option<Breaking> {
-        (!BREAKING.with(Cell::get)).then(|| {
-            BREAKING.with(|b| b.set(true));
-            Breaking
-        })
-    }
-}
-impl Drop for Breaking {
-    fn drop(&mut self) {
-        BREAKING.with(|b| b.set(false));
-    }
-}
+/// Ultimine's own breaks reach `destroy_block` again (the engine's player
+/// break fires it for each block): see `engine::reentry`.
+use crate::engine::reentry::Guard as Breaking;
 
 pub fn breaking() -> bool {
-    BREAKING.with(Cell::get)
+    crate::engine::reentry::active()
 }
 
 #[derive(Default)]
