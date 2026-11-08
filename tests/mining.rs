@@ -1,315 +1,423 @@
-use horizon_veinminer::*;
-use std::collections::{BTreeMap, BTreeSet};
+//! The server's decisions and the break loop, the client's state machine
+//! and right-click actions, driven through the engine's traits.
+use std::collections::BTreeMap;
+use ultimine_engine::client::Client;
+use ultimine_engine::config::{Activation, ClientPrefs, Rules};
+use ultimine_engine::geom::{Face, Pos};
+use ultimine_engine::matcher::NoTags;
+use ultimine_engine::protocol::{ClientState, VERSION};
+use ultimine_engine::rightclick::{self, Action, Farmer, ToolKind};
+use ultimine_engine::select::{Request, Selection, World, select};
+use ultimine_engine::server::{Actor, Breaker, GameMode, Refusal, Server, execute};
+use ultimine_engine::shape::ShapeId;
 
-struct World {
-    blocks: BTreeMap<Position, Block>,
-    player: Player,
-    tool: Option<Tool>,
-    food: bool,
-    harvest: bool,
-    calls: Vec<(Position, bool)>,
-    drops: usize,
-    xp: usize,
+#[derive(Default)]
+struct Game {
+    blocks: BTreeMap<Pos, String>,
+    held: Option<String>,
+    /// Durability left; the tool breaks (the hand empties) at 0.
+    durability: Option<u32>,
+    food: i32,
     exhaustion: f32,
-    failed: BTreeSet<Position>,
-    error: Option<Position>,
-    change_after_origin: Option<Position>,
+    calls: Vec<Pos>,
+    fail: Vec<Pos>,
+    /// Breaking the first key also turns the second into the third.
+    side_effect: Option<(Pos, Pos, String)>,
+    ages: BTreeMap<Pos, u8>,
+    applied: Vec<(Pos, Action)>,
 }
-impl World {
-    fn new(points: &[Position]) -> Self {
-        Self {
+
+impl Game {
+    fn ore(points: &[Pos]) -> Self {
+        Game {
             blocks: points
                 .iter()
-                .map(|p| (*p, block("minecraft:iron_ore", 1)))
+                .map(|p| (*p, "minecraft:iron_ore".to_string()))
                 .collect(),
-            player: Player {
-                actor: [0, 0, 0, 1],
-                name: "Alex".into(),
-                tick: 0,
-                survival: true,
-                sneaking: false,
-            },
-            tool: Some(Tool {
-                item: "minecraft:iron_pickaxe".into(),
-                remaining: Some(1000),
-            }),
-            food: true,
-            harvest: true,
-            calls: Vec::new(),
-            drops: 0,
-            xp: 0,
-            exhaustion: 0.0,
-            failed: BTreeSet::new(),
-            error: None,
-            change_after_origin: None,
+            held: Some("minecraft:iron_pickaxe".into()),
+            durability: Some(1000),
+            food: 20,
+            ..Game::default()
         }
+    }
+    fn select(&self, shape: ShapeId, rules: &Rules) -> Selection {
+        let req = Request {
+            origin: [0, 0, 0],
+            face: Face::Up,
+            facing: Face::North,
+            shape,
+        };
+        select(self, rules, &NoTags, &req)
     }
 }
-fn block(name: &str, state: u32) -> Block {
-    Block {
-        name: name.into(),
-        state,
-        breakable: true,
+
+impl World for Game {
+    fn block(&self, pos: Pos) -> Option<String> {
+        Some(
+            self.blocks
+                .get(&pos)
+                .cloned()
+                .unwrap_or_else(|| "minecraft:air".into()),
+        )
     }
 }
-impl Host for World {
-    type Error = &'static str;
-    fn player(&mut self) -> Player {
-        self.player.clone()
+
+impl Breaker for Game {
+    fn block(&self, pos: Pos) -> Option<String> {
+        World::block(self, pos)
     }
-    fn block(&self, p: Position) -> Option<Block> {
-        self.blocks.get(&p).cloned()
+    fn held(&self) -> Option<String> {
+        self.held.clone()
     }
-    fn tool(&self) -> Option<Tool> {
-        self.tool.clone()
+    fn food(&self) -> Option<i32> {
+        Some(self.food)
     }
-    fn can_harvest(&self, _: &Block) -> bool {
-        self.harvest
-    }
-    fn has_food(&self) -> bool {
-        self.food
-    }
-    fn mine(&mut self, p: Position, preserve: bool) -> Result<bool, Self::Error> {
-        self.calls.push((p, preserve));
-        if self.error == Some(p) {
-            return Err("native mining failed");
+    fn break_block(&mut self, pos: Pos) -> bool {
+        self.calls.push(pos);
+        if self.fail.contains(&pos) || self.blocks.remove(&pos).is_none() {
+            return false;
         }
-        if self.failed.contains(&p) {
-            return Ok(false);
+        if let Some((when, other, name)) = self.side_effect.clone()
+            && when == pos
+        {
+            self.blocks.insert(other, name);
         }
-        let removed = self.blocks.remove(&p).is_some();
-        if removed {
-            self.drops += 1;
-            self.xp += 2;
-            if !preserve
-                && let Some(t) = self.tool.as_mut()
-                && let Some(n) = t.remaining.as_mut()
-            {
-                *n = n.saturating_sub(1);
-                if *n == 0 {
-                    self.tool = None;
-                }
+        if let Some(d) = self.durability.as_mut() {
+            *d -= 1;
+            if *d == 0 {
+                self.held = None;
             }
         }
-        if self.calls.len() == 1
-            && let Some(p) = self.change_after_origin
-        {
-            self.blocks.insert(p, block("minecraft:diamond_ore", 99));
-        }
-        Ok(removed)
+        true
     }
-    fn exhaust(&mut self, n: f32) {
-        self.exhaustion += n;
+    fn exhaust(&mut self, amount: f32) {
+        self.exhaustion += amount;
+        if self.exhaustion >= 4.0 {
+            self.exhaustion -= 4.0;
+            self.food -= 1;
+        }
     }
 }
-fn mine(world: &mut World, config: &Config) -> Report {
-    Runtime::default().mine(world, config, [0, 0, 0]).unwrap()
+
+fn line(n: i32) -> Vec<Pos> {
+    (0..n).map(|x| [x, 0, 0]).collect()
 }
 
 #[test]
-fn connected_diagonals_group_variants_and_original_once_keep_drops_and_xp() {
-    let mut w = World::new(&[[0, 0, 0], [1, 1, 1], [2, 1, 1], [20, 0, 0]]);
-    w.blocks
-        .insert([2, 1, 1], block("minecraft:deepslate_iron_ore", 2));
-    let report = mine(&mut w, &Config::default());
-    assert_eq!((report.planned, report.extra_broken), (3, 2));
-    assert_eq!((w.calls.len(), w.drops, w.xp), (3, 3, 6));
-    assert_eq!(w.calls.iter().filter(|(p, _)| *p == [0, 0, 0]).count(), 1);
-    assert!(w.blocks.contains_key(&[20, 0, 0]));
-    assert_eq!(w.tool.unwrap().remaining, Some(997));
+fn breaks_every_selected_block_once_with_ultimines_hunger_cost() {
+    let mut g = Game::ore(&line(5));
+    let rules = Rules::default();
+    let sel = g.select(ShapeId::Shapeless, &rules);
+    let report = execute(&mut g, &sel, &rules, false);
+    assert_eq!(
+        (report.planned, report.broken, report.stopped),
+        (5, 5, false)
+    );
+    assert_eq!(g.calls, line(5));
+    assert!(g.blocks.is_empty());
+    assert!((g.exhaustion - 0.5).abs() < 1e-5);
 }
+
 #[test]
-fn plan_is_pure_deterministic_bounded_and_max_chain_includes_origin() {
-    let points: Vec<_> = (-8..=8)
-        .flat_map(|x| (-8..=8).map(move |z| [x, 0, z]))
-        .collect();
-    let mut w = World::new(&points);
-    let mut c = Config::default();
-    c.settings.max_chain = 7;
-    let targets = BTreeSet::from(["minecraft:iron_ore".into()]);
-    let a = preview(&w, [0, 0, 0], &targets, &c.settings);
-    let b = preview(&w, [0, 0, 0], &targets, &c.settings);
-    assert_eq!(a, b);
-    assert_eq!(a.len(), 7);
-    assert_eq!(w.calls.len(), 0);
-    assert_eq!(mine(&mut w, &c).extra_broken, 6);
-    assert_eq!(w.calls.len(), 7);
+fn creative_players_pay_nothing() {
+    let mut g = Game::ore(&line(3));
+    let rules = Rules::default();
+    let sel = g.select(ShapeId::Shapeless, &rules);
+    assert_eq!(execute(&mut g, &sel, &rules, true).broken, 3);
+    assert_eq!(g.exhaustion, 0.0);
 }
+
 #[test]
-fn loaded_matching_blocks_only_no_generated_chunks_or_unbreakable_bridge() {
-    let mut w = World::new(&[[0, 0, 0], [2, 0, 0]]);
-    w.blocks.insert([1, 0, 0], block("minecraft:stone", 2));
-    assert_eq!(mine(&mut w, &Config::default()).extra_broken, 0);
-    let mut w = World::new(&[[0, 0, 0], [1, 0, 0], [2, 0, 0]]);
-    w.blocks.get_mut(&[1, 0, 0]).unwrap().breakable = false;
-    assert_eq!(mine(&mut w, &Config::default()).extra_broken, 0);
-    let mut w = World::new(&[[0, 0, 0], [2, 0, 0]]);
-    let mut c = Config::default();
-    c.settings.search_radius = 2;
-    assert_eq!(mine(&mut w, &c).extra_broken, 1);
-}
-#[test]
-fn last_durability_point_is_kept_and_broken_initial_tool_stops_chain() {
-    let mut w = World::new(&[[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]);
-    w.tool.as_mut().unwrap().remaining = Some(3);
-    let r = mine(&mut w, &Config::default());
-    assert_eq!(r.extra_broken, 1);
+fn a_breaking_tool_stops_the_chain() {
+    let mut g = Game::ore(&line(6));
+    g.durability = Some(2);
+    let rules = Rules::default();
+    let sel = g.select(ShapeId::Shapeless, &rules);
+    let r = execute(&mut g, &sel, &rules, false);
     assert!(r.stopped);
-    assert_eq!(w.tool.unwrap().remaining, Some(1));
-    let mut w = World::new(&[[0, 0, 0], [1, 0, 0]]);
-    w.tool.as_mut().unwrap().remaining = Some(1);
-    assert_eq!(mine(&mut w, &Config::default()).extra_broken, 0);
-    assert!(w.tool.is_none());
+    assert_eq!(r.broken, 2);
+    assert_eq!(g.blocks.len(), 4);
 }
+
 #[test]
-fn preservation_and_additional_exhaustion_only_apply_to_extra_blocks() {
-    let mut w = World::new(&[[0, 0, 0], [1, 0, 0], [2, 0, 0]]);
-    w.tool.as_mut().unwrap().remaining = Some(2);
-    let mut c = Config::default();
-    c.settings.decrease_durability = false;
-    c.settings.hunger_per_block = 0.5;
-    assert_eq!(mine(&mut w, &c).extra_broken, 2);
-    assert_eq!(
-        w.calls,
-        vec![([0, 0, 0], false), ([1, 0, 0], true), ([2, 0, 0], true)]
-    );
-    assert_eq!(w.tool.unwrap().remaining, Some(1));
-    assert_eq!(w.exhaustion, 1.0);
-}
-#[test]
-fn stale_blocks_are_not_mined_even_when_the_new_block_is_whitelisted() {
-    let mut w = World::new(&[[0, 0, 0], [1, 0, 0], [2, 0, 0]]);
-    w.change_after_origin = Some([1, 0, 0]);
-    let r = mine(&mut w, &Config::default());
-    assert_eq!((r.changed, r.extra_broken), (1, 1));
-    assert_eq!(w.blocks[&[1, 0, 0]].name, "minecraft:diamond_ore");
-}
-#[test]
-fn original_failure_never_triggers_extras_and_extra_failure_aborts() {
-    let mut w = World::new(&[[0, 0, 0], [1, 0, 0], [2, 0, 0]]);
-    w.failed.insert([0, 0, 0]);
-    assert_eq!(mine(&mut w, &Config::default()).extra_broken, 0);
-    assert_eq!(w.calls.len(), 1);
-    let mut w = World::new(&[[0, 0, 0], [1, 0, 0], [2, 0, 0]]);
-    w.failed.insert([1, 0, 0]);
-    let r = mine(&mut w, &Config::default());
+fn running_out_of_food_stops_the_chain() {
+    let mut g = Game::ore(&line(10));
+    g.food = 1;
+    let rules = Rules {
+        exhaustion_per_block: 400.0, // 2 exhaustion a block: a food point every 2
+        ..Rules::default()
+    };
+    let sel = g.select(ShapeId::Shapeless, &rules);
+    let r = execute(&mut g, &sel, &rules, false);
     assert!(r.stopped);
-    assert_eq!(w.calls.len(), 2);
+    assert_eq!(r.broken, 2);
 }
+
 #[test]
-fn native_errors_propagate_without_attempting_later_blocks() {
-    let mut w = World::new(&[[0, 0, 0], [1, 0, 0], [2, 0, 0]]);
-    w.error = Some([1, 0, 0]);
+fn changed_blocks_are_skipped_and_failures_skip_or_stop() {
+    let mut g = Game::ore(&line(4));
+    g.side_effect = Some(([0, 0, 0], [2, 0, 0], "minecraft:gravel".into()));
+    let rules = Rules::default();
+    let sel = g.select(ShapeId::Shapeless, &rules);
+    let r = execute(&mut g, &sel, &rules, false);
+    assert_eq!((r.broken, r.changed), (3, 1));
+    assert_eq!(g.blocks[&[2, 0, 0]], "minecraft:gravel");
+
+    let mut g = Game::ore(&line(4));
+    g.fail.push([1, 0, 0]);
+    let sel = g.select(ShapeId::Shapeless, &rules);
+    let r = execute(&mut g, &sel, &rules, false);
+    assert_eq!((r.broken, r.failed, r.stopped), (3, 1, false));
+
+    let mut g = Game::ore(&line(4));
+    g.fail.push([1, 0, 0]);
+    let stop = Rules {
+        stop_on_break_fail: true,
+        ..Rules::default()
+    };
+    let r = execute(&mut g, &sel, &stop, false);
+    assert_eq!((r.broken, r.failed, r.stopped), (1, 1, true));
+    assert_eq!(g.calls.len(), 2);
+}
+
+fn actor(mode: GameMode) -> Actor {
+    Actor {
+        uuid: 7,
+        mode,
+        yaw: 180.0,
+        pitch: 0.0,
+        food: Some(20),
+        held: Some("minecraft:diamond_pickaxe".into()),
+    }
+}
+
+fn state(active: bool, shape: ShapeId) -> ClientState {
+    ClientState {
+        v: VERSION,
+        active,
+        shape,
+        want_rules: false,
+    }
+}
+
+#[test]
+fn the_server_mines_only_for_active_players_in_survival_or_creative() {
+    let rules = Rules::default();
+    let mut server = Server::default();
+    let a = actor(GameMode::Survival);
     assert_eq!(
-        Runtime::default().mine(&mut w, &Config::default(), [0, 0, 0]),
-        Err("native mining failed")
+        server.request(&a, [0, 0, 0], 0, &rules),
+        Err(Refusal::Inactive)
     );
-    assert_eq!(w.calls.len(), 2);
-}
-#[test]
-fn creative_adventure_sneak_tool_food_permissions_and_global_disable_gate_only_extras() {
-    for gate in 0..7 {
-        let mut w = World::new(&[[0, 0, 0], [1, 0, 0]]);
-        let mut c = Config::default();
-        match gate {
-            0 => w.player.survival = false,
-            1 => c.settings.must_sneak = true,
-            2 => w.harvest = false,
-            3 => {
-                c.settings.hunger_per_block = 0.2;
-                w.food = false;
-            }
-            4 => c.settings.permission_restricted = true,
-            5 => c.settings.enabled = false,
-            _ => {
-                c.groups.clear();
-                c.blocks.clear();
-            }
-        }
-        assert_eq!(mine(&mut w, &c).extra_broken, 0, "gate {gate}");
-        assert_eq!(w.calls.len(), 1);
+    assert!(server.client_state(7, &state(true, ShapeId::LargeTunnel), &rules));
+    assert!(!server.client_state(7, &state(true, ShapeId::LargeTunnel), &rules));
+    let req = server.request(&a, [0, 0, 0], 0, &rules).unwrap();
+    assert_eq!(req.shape, ShapeId::LargeTunnel);
+    // Looking north (yaw 180) at a wall: the south face was hit.
+    assert_eq!(req.face, Face::South);
+    for mode in [GameMode::Adventure, GameMode::Spectator] {
+        assert_eq!(
+            server.request(&actor(mode), [0, 0, 0], 0, &rules),
+            Err(Refusal::GameMode)
+        );
     }
-    let mut w = World::new(&[[0, 0, 0], [1, 0, 0]]);
-    w.player.sneaking = true;
-    let mut c = Config::default();
-    c.settings.must_sneak = true;
-    c.settings.permission_restricted = true;
-    c.players.insert("Alex".into());
-    assert_eq!(mine(&mut w, &c).extra_broken, 1);
-}
-#[test]
-fn cooldown_and_toggles_are_per_player_and_original_mining_is_never_cancelled() {
-    let mut rt = Runtime::default();
-    let c = Config::default();
-    let mut w = World::new(&[[0, 0, 0], [1, 0, 0]]);
-    assert_eq!(rt.mine(&mut w, &c, [0, 0, 0]).unwrap().extra_broken, 1);
-    for tick in [0, 19] {
-        let mut w = World::new(&[[0, 0, 0], [1, 0, 0]]);
-        w.player.tick = tick;
-        assert_eq!(rt.mine(&mut w, &c, [0, 0, 0]).unwrap().extra_broken, 0);
-        assert_eq!(w.calls.len(), 1);
-    }
-    let mut w = World::new(&[[0, 0, 0], [1, 0, 0]]);
-    w.player.actor = [0, 0, 0, 2];
-    assert_eq!(rt.mine(&mut w, &c, [0, 0, 0]).unwrap().extra_broken, 1);
-    let mut w = World::new(&[[0, 0, 0], [1, 0, 0]]);
-    w.player.tick = 20;
-    assert_eq!(rt.mine(&mut w, &c, [0, 0, 0]).unwrap().extra_broken, 1);
-    rt.set_enabled([0, 0, 0, 1], false);
-    let mut w = World::new(&[[0, 0, 0], [1, 0, 0]]);
-    w.player.tick = 100;
-    assert_eq!(rt.mine(&mut w, &c, [0, 0, 0]).unwrap().extra_broken, 0);
-    rt.set_enabled(w.player.actor, true);
-    w.blocks.insert([0, 0, 0], block("minecraft:iron_ore", 1));
-    assert_eq!(rt.mine(&mut w, &c, [0, 0, 0]).unwrap().extra_broken, 1);
-}
-#[test]
-fn group_tools_overrides_and_separate_group_mining_have_defined_precedence() {
-    let mut c = Config::default();
-    let g = c.groups.iter_mut().find(|g| g.id == "iron-ore").unwrap();
-    g.tools.insert("minecraft:diamond_pickaxe".into());
-    g.overrides.max_chain = Some(2);
-    let mut w = World::new(&[[0, 0, 0], [1, 0, 0], [2, 0, 0]]);
-    assert_eq!(mine(&mut w, &c).extra_broken, 0);
-    w.blocks.insert([0, 0, 0], block("minecraft:iron_ore", 1));
-    w.tool.as_mut().unwrap().item = "minecraft:diamond_pickaxe".into();
-    assert_eq!(mine(&mut w, &c).extra_broken, 1);
-    let mut w = World::new(&[[0, 0, 0], [1, 0, 0]]);
-    w.blocks
-        .insert([1, 0, 0], block("minecraft:deepslate_iron_ore", 2));
-    let mut c = Config::default();
-    c.settings.separate_group_mining = true;
-    assert_eq!(mine(&mut w, &c).extra_broken, 0);
-}
-#[test]
-fn malformed_unknown_and_unbounded_configuration_fails_closed() {
-    assert!(Config::default().validate().is_ok());
-    for source in [
-        r#"{"settings":{"maxChain":0}}"#,
-        r#"{"settings":{"searchRadius":100}}"#,
-        r#"{"settings":{"hungerPerBlock":-1}}"#,
-        r#"{"settings":{"delay":5}}"#,
-        r#"{"groups":[{"id":"x","blocks":["no-namespace"]}]}"#,
-        r#"{"groups":[{"id":"x","blocks":["minecraft:stone"]},{"id":"x","blocks":["minecraft:dirt"]}]}"#,
-    ] {
-        assert!(Config::from_json(source).is_err(), "{source}");
-    }
-    let c = Config::default();
-    let json = serde_json::to_string(&c).unwrap();
-    assert!(Config::from_json(&json).is_ok());
-}
-#[test]
-fn coordinates_at_integer_limits_do_not_wrap_to_other_chunks() {
-    let p = [i32::MAX, 0, i32::MIN];
-    let w = World::new(&[p]);
+    let mut hungry = a.clone();
+    hungry.food = Some(0);
     assert_eq!(
-        preview(
-            &w,
-            p,
-            &["minecraft:iron_ore".into()].into(),
-            &Settings::default()
-        )
-        .len(),
-        1
+        server.request(&hungry, [0, 0, 0], 0, &rules),
+        Err(Refusal::Hungry)
     );
+    hungry.mode = GameMode::Creative;
+    assert!(server.request(&hungry, [0, 0, 0], 0, &rules).is_ok());
+    server.client_state(7, &state(false, ShapeId::LargeTunnel), &rules);
+    assert_eq!(
+        server.request(&a, [0, 0, 0], 0, &rules),
+        Err(Refusal::Inactive)
+    );
+    server.forget(7);
+    assert!(server.player(7).is_none());
+}
+
+#[test]
+fn the_dig_face_wins_over_the_look_and_disabled_shapes_fall_back() {
+    let rules = Rules {
+        shapes: vec![ShapeId::Shapeless, ShapeId::SmallTunnel],
+        ..Rules::default()
+    };
+    let mut server = Server::default();
+    server.client_state(7, &state(true, ShapeId::LargeTunnel), &rules);
+    server.dig_started(7, [0, 0, 0], Face::Up);
+    let req = server
+        .request(&actor(GameMode::Survival), [0, 0, 0], 0, &rules)
+        .unwrap();
+    assert_eq!((req.face, req.shape), (Face::Up, ShapeId::Shapeless));
+    let req = server
+        .request(&actor(GameMode::Survival), [5, 0, 0], 0, &rules)
+        .unwrap();
+    assert_eq!(req.face, Face::South);
+}
+
+#[test]
+fn cooldowns_and_required_tools() {
+    let rules = Rules {
+        cooldown_ticks: 20,
+        require_tool: true,
+        ..Rules::default()
+    };
+    let mut server = Server::default();
+    server.client_state(7, &state(true, ShapeId::Shapeless), &rules);
+    let a = actor(GameMode::Survival);
+    assert!(server.request(&a, [0, 0, 0], 100, &rules).is_ok());
+    server.used(7, 100, &rules);
+    assert_eq!(
+        server.request(&a, [0, 0, 0], 119, &rules),
+        Err(Refusal::Cooldown)
+    );
+    assert!(server.request(&a, [0, 0, 0], 120, &rules).is_ok());
+    let mut bare = a.clone();
+    bare.held = Some("minecraft:stick".into());
+    assert_eq!(
+        server.request(&bare, [0, 0, 0], 200, &rules),
+        Err(Refusal::NoTool)
+    );
+    // Other players have their own cooldown.
+    server.client_state(8, &state(true, ShapeId::Shapeless), &rules);
+    let mut other = a.clone();
+    other.uuid = 8;
+    assert!(server.request(&other, [0, 0, 0], 101, &rules).is_ok());
+}
+
+#[test]
+fn client_activation_scrolling_and_messages() {
+    let mut c = Client::new(ClientPrefs::default());
+    // First contact asks for the rules.
+    let first = c.outgoing().unwrap();
+    assert!(first.want_rules && !first.active);
+    assert_eq!(c.outgoing(), None);
+    assert!(!c.scroll(1.0), "inactive: the hotbar keeps the wheel");
+    c.key_down = true;
+    assert!(c.outgoing().unwrap().active);
+    assert!(c.scroll(-1.0));
+    assert_eq!(c.shape(), ShapeId::SmallTunnel);
+    assert!(c.scroll(1.0));
+    assert!(c.scroll(1.0));
+    assert_eq!(c.shape(), ShapeId::EscapeTunnel);
+    assert_eq!(c.outgoing().unwrap().shape, ShapeId::EscapeTunnel);
+    // The server's rules narrow the shapes.
+    c.rules = Some(Rules {
+        shapes: vec![ShapeId::Shapeless, ShapeId::LargeTunnel],
+        ..Rules::default()
+    });
+    assert_eq!(c.shape(), ShapeId::Shapeless);
+    c.scroll(-1.0);
+    assert_eq!(c.shape(), ShapeId::LargeTunnel);
+    c.prefs.activation = Activation::Sneak;
+    assert!(!c.active());
+    c.sneaking = true;
+    assert!(c.active());
+}
+
+#[test]
+fn client_preview_matches_the_server_selection() {
+    let g = Game::ore(&[[0, 0, 0], [1, 1, 0], [2, 2, 0]]);
+    let mut c = Client::new(ClientPrefs::default());
+    c.update_preview(&g, Some(([0, 0, 0], Face::Up)), Face::North);
+    assert!(c.preview.is_empty(), "inactive: no preview");
+    c.key_down = true;
+    c.update_preview(&g, Some(([0, 0, 0], Face::Up)), Face::North);
+    let server = g.select(ShapeId::Shapeless, &Rules::default());
+    assert_eq!(c.preview, server.positions);
+    c.update_preview(&g, None, Face::North);
+    assert!(c.preview.is_empty());
+}
+
+impl Farmer for Game {
+    fn block(&self, pos: Pos) -> Option<String> {
+        World::block(self, pos)
+    }
+    fn air_above(&self, pos: Pos) -> bool {
+        !self.blocks.contains_key(&[pos[0], pos[1] + 1, pos[2]])
+    }
+    fn age(&self, pos: Pos) -> Option<u8> {
+        self.ages.get(&pos).copied()
+    }
+    fn apply(&mut self, pos: Pos, action: &Action) -> bool {
+        self.applied.push((pos, action.clone()));
+        true
+    }
+}
+
+#[test]
+fn right_click_harvests_only_ripe_crops_and_tills_open_dirt() {
+    let mut g = Game::default();
+    for x in 0..4 {
+        g.blocks.insert([x, 0, 0], "minecraft:wheat".into());
+        g.ages.insert([x, 0, 0], if x == 2 { 3 } else { 7 });
+    }
+    let rules = Rules::default();
+    let sel = g.select(ShapeId::Shapeless, &rules);
+    assert_eq!(sel.len(), 4);
+    assert_eq!(rightclick::apply(&mut g, &sel, &rules, ToolKind::Other), 3);
+    assert!(
+        g.applied
+            .iter()
+            .all(|(p, a)| p[0] != 2 && matches!(a, Action::Harvest(_)))
+    );
+
+    let mut g = Game::default();
+    for x in 0..3 {
+        g.blocks.insert([x, 0, 0], "minecraft:grass_block".into());
+    }
+    g.blocks.insert([1, 1, 0], "minecraft:stone".into());
+    let sel = g.select(ShapeId::Shapeless, &rules);
+    assert_eq!(rightclick::apply(&mut g, &sel, &rules, ToolKind::Hoe), 2);
+    assert_eq!(rightclick::apply(&mut g, &sel, &rules, ToolKind::Axe), 0);
+    let off = Rules {
+        right_click_hoe: false,
+        ..Rules::default()
+    };
+    assert_eq!(rightclick::apply(&mut g, &sel, &off, ToolKind::Hoe), 0);
+}
+
+#[test]
+fn axes_strip_logs() {
+    let mut g = Game::default();
+    for y in 0..3 {
+        g.blocks.insert([0, y, 0], "minecraft:spruce_log".into());
+    }
+    let rules = Rules::default();
+    let sel = g.select(ShapeId::Shapeless, &rules);
+    assert_eq!(rightclick::apply(&mut g, &sel, &rules, ToolKind::Axe), 3);
+    assert_eq!(
+        g.applied[0].1,
+        Action::Strip("minecraft:stripped_spruce_log".into())
+    );
+    assert_eq!(
+        rightclick::tool_kind(Some("minecraft:golden_axe")),
+        ToolKind::Axe
+    );
+    assert_eq!(
+        rightclick::tool_kind(Some("minecraft:pickaxe_handle")),
+        ToolKind::Other
+    );
+    assert_eq!(
+        rightclick::tool_kind(Some("minecraft:diamond_pickaxe")),
+        ToolKind::Other
+    );
+}
+
+#[test]
+fn tree_felling_takes_the_trunk_and_branches_but_not_the_neighbouring_tree() {
+    let mut g = Game::default();
+    for y in 0..6 {
+        g.blocks.insert([0, y, 0], "minecraft:oak_log".into());
+    }
+    g.blocks.insert([1, 4, 0], "minecraft:oak_wood".into());
+    g.blocks.insert([2, 5, 1], "minecraft:oak_log".into());
+    g.blocks.insert([-1, 2, 0], "minecraft:oak_leaves".into());
+    g.blocks.insert([0, 3, 1], "minecraft:birch_log".into());
+    let sel = g.select(ShapeId::Shapeless, &Rules::default());
+    assert_eq!(sel.len(), 8);
+    assert!(!sel.positions.contains(&[0, 3, 1]));
+    assert!(!sel.positions.contains(&[-1, 2, 0]));
 }

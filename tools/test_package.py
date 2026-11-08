@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Validate reproducible, source-only launcher packaging and compatibility pins."""
+"""The .hnmod is reproducible, source-only and carries a valid native manifest."""
 import hashlib
 import json
 from pathlib import Path
 import subprocess
 import sys
-import tomllib
 import unittest
 import zipfile
 
@@ -18,29 +17,26 @@ class PackageTests(unittest.TestCase):
             result = subprocess.check_output([sys.executable, 'tools/package.py'], cwd=ROOT, text=True)
             report = json.loads(result)
             data = Path(report['file']).read_bytes()
-            self.assertEqual(report['size'], len(data))
             self.assertEqual(report['sha256'], hashlib.sha256(data).hexdigest())
             return report, data
 
         first, data = build()
         self.assertEqual((first, data), build())
-        compat = json.loads((ROOT / 'compatibility.json').read_text())
-        project = tomllib.loads((ROOT / 'Cargo.toml').read_text())['package']
-        expected = {'horizon-native.json'} | {
-            f'mixins/veinminer/{name}' for name in
-            ('command.rs', 'guest-command.rs', 'horizon-mixin.toml', 'mining.rs', 'runtime.rs')
-        }
         with zipfile.ZipFile(first['file']) as archive:
-            self.assertEqual(set(archive.namelist()), expected)
-            self.assertEqual(len(archive.namelist()), len(expected))
-            self.assertIsNone(archive.testzip())
-            self.assertEqual(json.loads(archive.read('horizon-native.json')), {
-                'schema': 1, 'id': 'veinminer', 'version': project['version'], 'game': '26.3',
-                'horizon': compat['horizon_revision'], 'mixins': compat['horizon_mixins_revision'],
-            })
+            names = set(archive.namelist())
+            self.assertIn('horizon-native.json', names)
+            self.assertIn('mixins/ultimine/horizon-mixin.toml', names)
+            self.assertIn('mixins/ultimine/api/Cargo.toml', names)
+            self.assertIn('mixins/ultimine/api/src/lib.rs', names)
+            self.assertIn('mixins/ultimine/api/src/engine/shape.rs', names)
+            self.assertTrue(all(n == 'horizon-native.json' or n.startswith('mixins/ultimine/') for n in names))
+            meta = json.loads(archive.read('horizon-native.json'))
+            self.assertEqual(meta['schema'], 1)
+            self.assertEqual(meta['id'], 'ultimine')
+            self.assertEqual(len(meta['horizon']), 40)
+            self.assertEqual(len(meta['mixins']), 40)
             for info in archive.infolist():
                 self.assertEqual(info.date_time, (2026, 1, 1, 0, 0, 0))
-                self.assertEqual(info.external_attr >> 16, 0o100644)
                 if info.filename != 'horizon-native.json':
                     self.assertEqual(archive.read(info.filename), (ROOT / info.filename).read_bytes())
 

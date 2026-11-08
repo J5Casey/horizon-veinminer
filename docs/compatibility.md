@@ -1,43 +1,54 @@
-# Feature coverage
+# Feature coverage and compatibility
 
-Reference project: [MiraculixxT/Veinminer](https://github.com/MiraculixxT/Veinminer),
-revision `b3bfeb39945260f857a9b79c11dc206c109a9d0c`.
-Its [overview](https://github.com/MiraculixxT/Veinminer/blob/b3bfeb39945260f857a9b79c11dc206c109a9d0c/docs/overview.md)
-describes the base server mod and separate client/enchantment addons. This is an
-unofficial behavioral port of normal server-side vein mining, with an independent
-configuration format and native Horizon adapter.
+## Against FTB Ultimine
 
-| Capability | This version |
+| Ultimine | Here |
 |---|---|
-| Connected veins including diagonal neighbours | Implemented; fixed-order bounded breadth-first traversal |
-| Normal loot, XP, tool wear, block updates and events | Delegates every block to the existing Horizon player-mining method |
-| Stone/deepslate ore and wood groups | Implemented with explicit IDs and independently chosen defaults |
-| Custom blocks, tool groups and group settings | Implemented in JSON; first matching group supplies overrides |
-| Correct-tool, survival, sneak and durability checks | Implemented |
-| Cooldown, per-player toggles, extra hunger cost | Implemented |
-| Permission restriction | Explicit name allowlist; no permissions plugin integration |
-| Settings reload | Implemented with permission level 2 and error retention |
-| Single player, LAN and dedicated server path | Shared native adapter type-checked; full live sessions require manual verification |
-| Client addon keybind, previews, HUD, tunnel/flat shapes | Future work; the core exposes a pure preview API |
-| Enchantment addon | Future work |
-| Delayed/layered breaking and mining-speed adjustment | Future work; current chains run synchronously after the original break |
-| Merged drop positions | Future work; native drops remain at their own blocks |
-| Upstream `/settings`, `/groups`, `/presets`, `/blocks` editing | Future work; edit JSON and reload |
-| Tags, wildcard IDs and client/server configuration packets | Future work; explicit IDs and server configuration only |
-| Automatic updates | Future work |
-| Native mixin bundle | Implemented: three TOML HEAD injections and one support module, applied by horizon-mixins 0.6.0 |
-| `.hmod` packaging | Future work; the bundle builds a pinned custom native binary |
+| Hold key (default `` ` ``), rebindable | Yes (Options > Mods > Ultimine) |
+| Shapeless, small tunnel, small square, large tunnel, mining tunnel, escape tunnel | Yes, same geometry and order |
+| Scroll to cycle shapes, overlay with context lines | Yes (two lines each way) |
+| Outline preview (`render_outline` 256) | Yes, Horizon's block rims, 256 per mod |
+| `merge_tags` / `merge_tags_shaped = ["*"]` | Merge groups of ids and `#tags`; shaped any-block default |
+| Crop-like matching with the plant neighbourhood | Yes, by plant kind |
+| `max_blocks` 64, `exhaustion_per_block` 20, cooldown, `require_tool` | Yes |
+| Hardness check (no obsidian behind stone) | Approximated: a list of hard blocks is never taken by any-block matching |
+| Stop when the tool breaks or the player starves | Yes |
+| Drops accumulated at the origin | Drops pop at each block, or go to the inventory (`drops_to_inventory`) |
+| Right click: strip, path, till, harvest crops | Yes; copper scraping and FTB EZ Crystals are not |
+| `excluded_blocks` / `block_whitelist` tags | `excluded_blocks` / `only_blocks` lists |
+| Experience cost per block, FTB Ranks, attributes | No |
+| Keyboard shape cycling keys | No (wheel only) |
 
-The maximum chain counts eligible selected blocks, including the original.
-Search radius is Chebyshev distance around each accepted block; larger radii
-can bridge gaps. This is a documented source-level contract, rather than a
-promise of identical traversal ordering to upstream. Runtime changes use
-Horizon's existing vanilla mining behavior and random call order for each
-individual block. Mods that cancel the underlying native operation are
-respected when it reports no removal. WASM `block-broken` callbacks are
-after-the-fact notifications and cannot cancel mining.
+The client preview has no tag data: groups written as `#tags` only match on the
+server. The default groups are written out as block ids so preview and server
+agree. Right-click actions don't wear the tool.
 
-No Minecraft assets, upstream mod source or artwork are distributed here.
-Preparing resources, signing into Minecraft and running Horizon remain the
-host application's responsibility. Generated exports preserve Horizon's own
-license and third-party notices.
+## Horizon API used
+
+Hooks: `mods`, `settings`, `settings_click`, `key`, `wheel`, `tick`, `visuals`,
+`hud`, `net_from_client`, `net_from_server`, `player_logged_out`,
+`left_click_block` (API 30), `destroy_block` (API 14), `right_click_block`
+(API 21).
+
+Helpers, stamped: `mod_key`, `setting`, `set_setting`, `window`, `playing`,
+`player`, `view_hit` (116), `block` (20), `block_property` (20), `held`,
+`acting_player` (21), `net_send_to_server` / `net_send_to_player` (40),
+`set_block` (24), `set_block_property` (18), `take_items`, `fill`, `text`,
+`text_width`.
+
+Helpers still in pending fragments (no API number yet): `sneaking` and
+`block_name_in_tag` (`host_bridge`), `player_food` and `set_player_status`
+(`player_status`), `default_state` (`default_state`), and for the interim break
+`equipment` (`host_bridge`) and `destroy_block` (`machine_breaking`); with
+`player-break`, `player_break_block` (`player_break`, unmerged).
+
+So the bundle pins `horizon_revision` (Horizon main `3658465`). Once those
+fragments are stamped and `player_break` is merged: turn on `player-break`,
+remove the pin from `horizon-mixin.toml` and the api crate's `rev`, and add
+`"hooks": <the API that stamps the last of them>` to `horizon-native.json` in
+`tools/package.py`.
+
+## Not yet validated
+
+The engine is unit-tested and the trait mod type-checks against Horizon main
+and the `braid/player-break` branch; no in-game session has been run yet.

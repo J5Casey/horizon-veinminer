@@ -1,60 +1,70 @@
 # Architecture
 
-`src/lib.rs` contains a deterministic mining engine behind a small `Host`
-interface. A host supplies loaded-block reads, player/tool facts and its normal
-player-mining operation. The engine selects connected matching blocks by
-breadth-first traversal in fixed x/y/z order. Both accepted blocks and examined
-positions are bounded. Checked coordinate addition prevents wrapping at integer
-limits. Preview reads do not mutate blocks or load chunks.
+```
+mixins/ultimine/                 the bundle (what the .hnmod carries)
+  horizon-mixin.toml             [mod], [compatibility] pin, [api] path = "api"
+  api/                           the trait mod package the launcher links in
+    src/engine/                  the engine: no Horizon types at all
+    src/lib.rs                   `hooks()`, the Hooks impl: routes hooks to the halves
+    src/client_side.rs           key, wheel, tick (messages + preview), visuals, hud
+    src/server_side.rs           messages, rules, destroy_block, right_click_block
+    src/world.rs                 the engine's traits over `dyn Host`
+    src/player_break.rs          the one seam for "break as the player"
+Cargo.toml                       builds src/engine alone (crate `ultimine-engine`)
+tests/                           engine tests (shapes, server, client, right click)
+```
 
-Selection happens before the original block is removed. The original native
-mining call then runs exactly once. If it fails or removes nothing, extra mining
-never starts. Each extra hit must still have its original state and pass current
-tool/food checks. Changed hits are skipped; failed native breaks abort the
-remaining chain. Successful extras incur only the configured additional
-exhaustion. The core has no global mutable state; toggles and cooldowns belong
-to a `Runtime` per world on the hosting thread.
+## Engine
 
-`native/horizon.rs` adds a module inside Horizon's existing game binary and
-implements `Host` using its private APIs. It calls `break_block_as_player`,
-retaining Horizon's loot, XP, block entities, neighbours, statistics, level
-events and server-mod event behavior. It never calls `/setblock`. The existing
-`with_player_actor` scope and guest-state swapping surround the chain. Extra
-calls go directly to the original method, which avoids recursive chaining.
-This shared entry point is reached by in-frame mining and guest mining on the
-integrated/LAN/dedicated server. The adapter's survival gate excludes remote
-client prediction and creative/adventure/spectator chains.
+`engine/` is plain Rust over a few traits, compiled twice: as the root crate for
+`cargo test`, and as `mod-ultimine`'s `engine` module in the game.
 
-`tools/horizon.py` exports committed Horizon files with `git archive`, checks
-compatibility hashes, and materializes the committed documentation symlink.
-It never replaces or appends Rust source itself. It invokes the standard
-`horizon-mixins plan` and `apply` commands with `mixins/veinminer/` and records
-the schema-5 JSON plan in `target/mixins/plan.json`. Three cancellable HEAD
-hooks handle the mining entry, normal command dispatch and guest command
-queueing. A support-module declaration installs the shared runtime. The
-original native mining method and original `Game` layout/constructors stay intact.
+- `geom`: positions, faces (`Face::from_yaw`, `Face::from_hit`), checked offsets.
+- `shape`: the `Shape` trait and the six shapes. A shape gets the origin, the face
+  hit, the player's horizontal facing, the block limit and a `check(pos)`; it
+  returns positions in breaking order. `Shapeless` is a bounded breadth-first
+  flood over the 26 neighbours (Ultimine's plant neighbourhood for plants),
+  nearest first; `Line` is the small tunnel; `Layers` (depth 1 or unlimited) the
+  small square and large tunnel; `DiagonalTunnel { rise }` the mining and escape
+  tunnels.
+- `matcher`: Ultimine's choice of matcher (merge group, plant kind, same block,
+  or any block for shaped mining) and the exclusions. Tags go through `Tags`.
+- `select`: one `select(world, rules, tags, request)` used by both halves.
+- `server`: per-player state from the client, `Server::request` (active?, game
+  mode, cooldown, food, tool, which face), and `execute`, the break loop over
+  `Breaker`: snapshot, skip changed blocks, break as the player, exhaustion,
+  stop when the tool breaks or food runs out.
+- `client`: activation (key / sneak / both), shape cycling, the messages to send
+  and the preview.
+- `rightclick`: strip/path/till/harvest decisions over `Farmer`.
+- `protocol`: versioned JSON on `ultimine:state` (client to server) and
+  `ultimine:rules` (server to client), size-checked.
+- `config`, `page`: the rules and preferences, and the settings page.
 
-Runtime state uses a thread-local map keyed by `world_root`. Each world has its
-own UUID-keyed toggles and cooldowns. A state lease releases the RefCell borrow
-before calling game code and restores state on normal return, errors or unwinding.
-This avoids adding fields to `Game` and keeps server threads independent.
+## Glue
 
-The self-contained runtime payload is committed at `mixins/veinminer/runtime.rs`.
-`tools/bundle.py` assembles it from the adapter, core and tests; this changes
-mod source only. `--check` rejects stale generated payloads. All private access
-uses ordinary same-crate Rust visibility; no game-to-mod Cargo dependency is
-created. Engine helpers and the module use Horizon's existing dependencies.
+`lib.rs` holds one `Ultimine` with a `Mutex` per half: one instance serves the
+window's game and the server's. The client half reads the key with
+`Host::mod_key`, runs its tick on the window (`Host::window`), sends state with
+`net_send_to_server`, previews from `view_hit` and client block reads, outlines
+with `visuals` rims and draws the overlay in `hud`.
 
-Mixin staging publishes a complete separate workspace atomically and preserves
-unchanged bytes/mtimes. The port holds its stage lock through compilation and
-locks its separate Cargo target directory. Pristine exports have source hash
-markers; exported Horizon retains its license and notices. No assets or saves
-are copied, and generated trees/logs are ignored by Git.
+The server half is authoritative. `left_click_block` records the face a dig
+started on; `destroy_block` (acting player swapped in) asks the engine, selects
+again from the server's world, and when more than one block is selected breaks
+them all, the origin first, through `player_break::BREAK`, then cancels the
+original break, as Ultimine cancels its `BreakEvent`. Those breaks reach
+`destroy_block` again: a thread-local guard makes them pass through, and the
+server hooks check it before taking their lock.
 
-`tools/test_stage.py` applies the real bundle twice and verifies its three HEAD
-injections and one module, source bytes/mtimes and immutable upstream checkout.
-The Rust audit in `tools/audit` removes only planned additions and compares all
-affected original files using syn and canonical formatting. This checks every
-other method, struct and expression, including `break_block_as_player`, rather
-than relying on a textual source replacement. Native compilation and the
-embedded mining tests validate the resulting real game binary.
+## The player-break seam
+
+Breaking "as the player" (their checks, the hook, loot for the held tool, tool
+wear, statistics, exhaustion, experience, optionally into the inventory) is
+`Host::player_break_block(uuid, pos, into_inventory)`, which is being added to
+Horizon (horizon-rust/horizon#12195, branch `braid/player-break`). Until it is
+merged the crate's default build uses an interim break
+(`Host::destroy_block`, a machine break with the held tool's loot: no tool wear,
+statistics or drops-to-inventory). The switch is one line: make `player-break`
+the api crate's default feature. Both builds are type-checked
+(`tools/check_api.py`, with and without `--features player-break`).

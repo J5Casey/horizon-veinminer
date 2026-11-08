@@ -1,144 +1,61 @@
-# Horizon Veinminer
+# Ultimine for Horizon
 
-An unofficial Rust port of Veinminer's server-side connected mining behavior,
-for Horizon commit `d91cab68ded29bd2b004f7050c468fb98c41a00b` (Minecraft 26.3).
-It uses `horizon-mixins` 0.6.0 to build a native Horizon game/server from a
-separate staged source tree. The committed [TOML bundle](mixins/veinminer/horizon-mixin.toml)
-declares three cancellable HEAD hooks and one shared runtime module.
-The original Horizon checkout stays unchanged.
+An [FTB Ultimine](https://github.com/FTBTeam/FTB-Ultimine)-style vein miner for
+[Horizon](https://github.com/horizon-rust/horizon) (Minecraft 26.3 in Rust), as a
+native **trait mod**: it uses only Horizon's catalog hooks and `Host` helpers, no
+injections into private game functions.
 
-Breaking one permitted block mines its connected vein, including diagonal
-neighbours. Every block goes through Horizon's existing player mining code:
-loot, XP, tool wear, block updates, statistics and server block events retain
-that code's behavior. Creative, adventure and spectator modes do not trigger
-extra mining. The default configuration groups matching stone/deepslate ores
-and matching wood species, with a maximum of 100 blocks and a 20-tick cooldown.
+Hold the Ultimine key (default <kbd>`</kbd>, rebindable under Options > Mods >
+Ultimine) and break a block: everything the current shape selects breaks with it,
+as you, with your tool. Scroll while holding the key to change shape. The blocks
+that will break are outlined, and an overlay names the shape and the count.
 
-The engine supports explicit block/tool groups, group setting overrides,
-per-player toggles, sneak/tool/permission checks, search radius, durability
-protection and extra hunger cost. It plans against loaded chunks, rechecks
-block states before mining, and stops when an extra break fails or the tool
-is exhausted. See [configuration](docs/configuration.md).
+- **Shapes** (Ultimine's six, in its order): Shapeless (follows the vein, the
+  default), Small Tunnel, Small Square (3x3), Large Tunnel (3x3), Mining Tunnel
+  (diagonal down) and Escape Tunnel (diagonal up).
+- **Matching**: shapeless mining takes the same block, or a merge group (ores
+  with their deepslate variant, overworld stone, a tree species' logs and wood);
+  shaped mining takes any block by default, never air, fluids, unbreakable or
+  much harder blocks (obsidian behind stone stays).
+- **Tree felling** is shapeless mining on a log: the whole connected trunk and
+  branches of that species come down. No separate tree mod is needed.
+- **Right click** with the key held: axes strip, shovels make paths, hoes till,
+  and ripe crops are harvested and replanted (one seed each).
+- **Costs and limits** follow Ultimine's defaults: 64 blocks, 20 hunger per block
+  (0.1 exhaustion), stop when the tool breaks or food runs out. Drops can go
+  straight to the inventory.
+- **Multiplayer**: the client sends its key state and shape; the server decides
+  and breaks. Works in single player, on LAN and on dedicated servers.
 
-## Launcher and registry bundle
+## Build and install
 
-Version 0.3.2 targets Nightly 2026-10-31 (`d91cab6`, tag `nightly-source/2026-10-31-d91cab6`)
-and Horizon Mixins 0.6.0 (`4342a0b`). Package the source for a launcher with
-native-mod support:
+The mod is the bundle in [`mixins/ultimine/`](mixins/ultimine). Package it:
 
 ```sh
-python3 tools/package.py
+python3 tools/package.py   # writes target/ultimine-0.4.0.hnmod
 ```
 
-This writes `target/veinminer-0.3.2.hnmod` and prints its SHA-256. The archive
-contains the native compatibility manifest and mixin sources, with deterministic
-bytes and timestamps. The launcher checks it against the registry, installs it
-under `horizon-native-mods/`. Turn on Settings → Game → **Native mods
-(experimental)**, choose **Build**, and confirm the native-code warning. The
-launcher downloads its own Rust toolchain and builds the exact Horizon and Mixins
-revisions pinned above as a separate native version. Install Horizon first and
-provide the platform build dependencies described in
-[Horizon's native-mod documentation](https://github.com/horizon-rust/horizon/blob/main/docs/native-mods.md).
-Toggle or remove bundles through the installed Mods list, then rebuild the enabled
-combination. Ordinary Play does not compile mods automatically. Other Horizon
-revisions have not been validated. Native code runs with your account's permissions.
-The original bundle and source checkout stay unchanged.
+Install the `.hnmod` with a launcher that supports native mods (Settings > Game >
+Native mods), then build. Turn it off or on any time in Options > Mods.
 
-## Build
-
-Requirements: Linux, Rust 1.95.0, Python 3.12+, a local pinned Horizon Git clone,
-Horizon Mixins 0.6.0, and cached Cargo dependencies. This checkout defaults to
-the sibling
-`../horizon`; pass `--horizon /path/to/horizon` for another location.
+## Development
 
 ```sh
-cargo fetch --locked
-# Clone once beside this repository (or set HORIZON_MIXINS to its path):
-git clone https://github.com/horizon-rust/horizon-mixins ../horizon-mixins
-# Use the exact revision recorded in compatibility.json:
-python3 -c 'import json,subprocess; subprocess.run(["git","-C","../horizon-mixins","checkout",json.load(open("compatibility.json"))["horizon_mixins_revision"]],check=True)'
-cargo fetch --locked --manifest-path ../horizon-mixins/Cargo.toml
-cargo fetch --locked --manifest-path tools/audit/Cargo.toml
-cargo test --locked --offline
-python3 tools/horizon.py check
-python3 tools/horizon.py build
-```
-
-The last command prints JSON with the binary path. `build` uses Horizon's `fast`
-profile and `--no-default-features`, which includes the game and dedicated server
-with audio/controllers disabled. Cargo output is saved under `target/`. All Rust source rewrites run through
-`horizon-mixins plan`/`apply`; this port's Python tool only exports the pristine
-revision, invokes the CLI and runs Cargo.
-Dependencies are locked and builds run offline. If Horizon's dependencies are
-not cached, stage first and fetch them once:
-
-```sh
-python3 tools/horizon.py stage > target/stage.json
-python3 -c 'import json; print(json.load(open("target/stage.json"))["stage"])'
-# Use the printed path below:
-cargo fetch --locked --manifest-path /printed/stage/path/Cargo.toml
-```
-
-Run the printed binary with your own prepared Horizon resources and game
-arguments. Installing the port means using this custom binary for the world
-host/server. Default single player's server thread and LAN/dedicated players
-all reach the adapted player-mining entry point; a remote client does not
-perform additional mining. The original Minecraft/Fabric/NeoForge/Paper client
-addon protocol is separate from this port.
-
-## Commands
-
-- `/veinminer` or `/veinminer status`: show your session toggle.
-- `/veinminer toggle`, `/veinminer on`, `/veinminer off`: change your toggle.
-- `/veinminer reload`: reload the JSON configuration; permission level 2 required.
-
-Toggles are keyed by the acting player's UUID within each world on the hosting
-thread and last for that thread's session.
-They work without granting vanilla command privileges. Commands currently have
-no custom client autocomplete and cannot be nested under `/execute`.
-
-To customize settings:
-
-```sh
-cargo run --quiet --locked --offline --bin veinminer-config > my-veinminer.json
-HORIZON_VEINMINER_CONFIG="$PWD/my-veinminer.json" /path/to/custom/horizon-client <game-arguments>
-```
-
-Without that environment variable the built-in defaults apply. A malformed
-startup config disables extra mining and prints its error; ordinary mining
-continues. A failed reload keeps the previously loaded configuration.
-
-## Validation and compatibility
-
-```sh
-cargo fmt --all --check
-rustfmt --edition 2024 --check native/horizon.rs
-cargo fmt --manifest-path tools/audit/Cargo.toml --check
-cargo clippy --all-targets --locked --offline -- -D warnings
-cargo test --locked --offline
-python3 tools/bundle.py --check
-python3 tools/test_ci.py
+cargo test                                  # the engine, without the game
+cargo clippy --all-targets -- -D warnings
 python3 tools/test_package.py
-python3 tools/test_stage.py
-python3 tools/horizon.py check
-python3 tools/horizon.py test
+# Type-check the trait mod against a Horizon tree, staged as the launcher does:
+git -C ../horizon archive <rev> | tar -x -C target/horizon-src
+python3 tools/check_api.py target/horizon-src [--clippy] [--features player-break]
 ```
 
-Thirteen in-memory host tests cover connected/grouped veins, deterministic
-bounded selection, exactly-once native mining calls, cooldowns/toggles,
-permissions/tools/food, durability, changed blocks, failures and overflow.
-`horizon.py test` embeds the same tests in the real Horizon game binary, checking
-the exact engine source used there. `test_stage.py` checks repeatable bytes and
-mtimes, the actual JSON plan, and unchanged upstream source. A syn audit
-compares every affected file after removing only the planned HEAD statements
-and module, normalizing the formatter's harmless syntax changes.
-A full gameplay session with prepared resources is a separate manual check.
+See [architecture](docs/architecture.md) and
+[feature coverage and compatibility](docs/compatibility.md).
 
-See [architecture](docs/architecture.md), [feature coverage](docs/compatibility.md)
-and [validation results](docs/validation.md). This release implements normal
-connected mining; delayed mining, mining-speed adjustment, drop merging and
-the client/enchantment addons remain outside its supported feature set.
+## Credits
 
-[MiraculixxT's Veinminer](https://github.com/MiraculixxT/Veinminer) is the original
-project. This repository contains independently written Rust code and no
-upstream mod code, artwork, game binaries or Minecraft assets. License: [MIT](LICENSE).
+Forked from [levzzz5154/horizon-veinminer](https://github.com/levzzz5154/horizon-veinminer),
+an unofficial Rust port of [MiraculixxT's Veinminer](https://github.com/MiraculixxT/Veinminer).
+Behaviour modelled on FTB Ultimine by Feed The Beast; this repository contains
+independently written code and no code, artwork or assets from either project or
+from Minecraft. License: [MIT](LICENSE).

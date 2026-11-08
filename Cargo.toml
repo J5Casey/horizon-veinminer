@@ -1,10 +1,17 @@
+# The engine of the `ultimine` native mod, built on its own so its tests run
+# without Horizon. The same files are a module of the mod's `[api]` crate
+# (mixins/ultimine/api), which Horizon's launcher links into the game.
 [package]
-name = "horizon-veinminer"
-version = "0.3.2"
+name = "ultimine-engine"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT"
-description = "Server-side vein mining for a pinned Horizon native build"
+description = "Ultimine-style vein mining for Horizon: the engine, without the game"
+publish = false
+
+[lib]
+path = "mixins/ultimine/api/src/engine/mod.rs"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
