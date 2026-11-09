@@ -7,7 +7,7 @@
 | Hold key (default `` ` ``), rebindable | Yes (Options > Mods > Ultimine) |
 | Shapeless, small tunnel, small square, large tunnel, mining tunnel, escape tunnel | Yes, same geometry and order |
 | Scroll to cycle shapes, overlay with context lines | Yes (two lines each way) |
-| Outline preview (`render_outline` 256) | Yes, Horizon's block rims, 256 per mod |
+| Outline preview (`render_outline` 256) | Yes, Horizon's block rims, 256 per mod; the targeted block's too, in place of its vanilla outline |
 | `merge_tags` / `merge_tags_shaped = ["*"]` | Merge groups of ids and `#tags`; shaped any-block default |
 | Crop-like matching with the plant neighbourhood | Yes, by plant kind |
 | `max_blocks` 64, `exhaustion_per_block` 20, cooldown, `require_tool` | Yes |
@@ -26,7 +26,8 @@ agree. Right-click actions don't wear the tool.
 ## Horizon API used
 
 Hooks: `mods`, `settings`, `settings_click`, `key`, `wheel`, `tick`, `visuals`,
-`hud`, `net_from_client`, `net_from_server`, `player_logged_out`,
+`block_highlight` (API 86: the vanilla outline gives way to the preview's rim on
+the targeted block), `hud`, `net_from_client`, `net_from_server`, `player_logged_out`,
 `left_click_block` (API 30), `destroy_block` (API 14), `right_click_block`
 (API 21).
 

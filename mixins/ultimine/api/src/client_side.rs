@@ -2,7 +2,7 @@
 //! telling the server, the outline preview and the HUD.
 use crate::engine::client::Client;
 use crate::engine::config::ClientPrefs;
-use crate::engine::geom::Face;
+use crate::engine::geom::{Face, Pos};
 use crate::engine::protocol::{self, MOD_ID};
 use crate::engine::shape::ShapeId;
 use crate::world::HostWorld;
@@ -88,23 +88,31 @@ impl ClientSide {
         client.update_preview(&HostWorld(host), target, facing);
     }
 
-    pub fn visuals(&mut self, host: &dyn Host, rims: &mut Vec<NativeBlockRim>) {
+    /// The blocks the preview outlines this frame: none while inactive, with
+    /// outlines off, or for a lone block (the vanilla outline is enough).
+    fn outlined(&mut self, host: &dyn Host) -> &[Pos] {
         let client = self.client(host);
         if !client.active() || !client.prefs.outline || client.preview.len() <= 1 {
-            return;
+            return &[];
         }
         let limit = client.prefs.outline_limit.min(RIM_BUDGET);
-        rims.extend(
-            client
-                .preview
-                .iter()
-                .take(limit)
-                .map(|&pos| NativeBlockRim {
-                    pos,
-                    argb: 0xC0FF_FFFF,
-                    width: 2.0,
-                }),
-        );
+        &client.preview[..limit.min(client.preview.len())]
+    }
+
+    pub fn visuals(&mut self, host: &dyn Host, rims: &mut Vec<NativeBlockRim>) {
+        rims.extend(self.outlined(host).iter().map(|&pos| NativeBlockRim {
+            pos,
+            argb: 0xC0FF_FFFF,
+            width: 2.0,
+        }));
+    }
+
+    /// The targeted block's vanilla outline: replaced by the preview's rim
+    /// when the preview outlines that block, so the whole vein looks the
+    /// same. Drawn after the rims and on top of them, it would hide the
+    /// targeted block's rim under its black lines.
+    pub fn replaces_highlight(&mut self, host: &dyn Host, pos: Pos) -> bool {
+        self.outlined(host).contains(&pos)
     }
 
     pub fn hud(&mut self, host: &dyn Host, batch: &mut HudBatch, corners: &mut Corners) {

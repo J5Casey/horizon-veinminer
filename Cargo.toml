@@ -3,7 +3,7 @@
 # (mixins/ultimine/api), which Horizon's launcher links into the game.
 [package]
 name = "ultimine-engine"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT"

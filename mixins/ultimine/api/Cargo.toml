@@ -1,6 +1,6 @@
 [package]
 name = "mod-ultimine"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2024"
 license = "MIT"
 description = "Ultimine-style vein mining for Horizon: the trait mod"

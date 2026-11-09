@@ -20,9 +20,10 @@ use engine::config::Rules;
 use engine::page::{self, Changed};
 use engine::protocol::MOD_ID;
 use horizon_client::mod_api::{
-    DestroyBlockEvent, Flow, Hooks, Host, HudEvent, KeyEvent, LeftClickBlockEvent, ModsEvent,
-    NativeMod, NetFromClientEvent, NetFromServerEvent, PlayerLoggedOutEvent, RightClickBlockEvent,
-    SettingsClickEvent, SettingsEvent, TickEvent, VisualsEvent, WheelEvent,
+    BlockHighlightEvent, DestroyBlockEvent, Flow, Hooks, Host, HudEvent, KeyEvent,
+    LeftClickBlockEvent, ModsEvent, NativeMod, NetFromClientEvent, NetFromServerEvent,
+    PlayerLoggedOutEvent, RightClickBlockEvent, SettingsClickEvent, SettingsEvent, TickEvent,
+    VisualsEvent, WheelEvent,
 };
 use server_side::ServerSide;
 use std::sync::{Mutex, MutexGuard};
@@ -116,6 +117,14 @@ impl Hooks for Ultimine {
 
     fn visuals(&self, host: &dyn Host, event: &mut VisualsEvent<'_>) {
         lock(&self.client).visuals(host, event.rims);
+    }
+
+    fn block_highlight(&self, host: &dyn Host, event: &mut BlockHighlightEvent) -> Flow {
+        if lock(&self.client).replaces_highlight(host, event.pos) {
+            Flow::Cancel
+        } else {
+            Flow::Continue
+        }
     }
 
     fn hud(&self, host: &mut dyn Host, event: &mut HudEvent<'_>) {
