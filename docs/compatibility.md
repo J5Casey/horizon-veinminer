@@ -42,7 +42,7 @@ Helpers still in pending fragments (no API number yet): `sneaking` and
 (`player_status`), `default_state` (`default_state`), and for the interim break
 `equipment` (`host_bridge`) and `destroy_block` (`machine_breaking`); with
 `player-break` (the default), `player_break_block` (`player_break`,
-horizon-rust/horizon#12259, unmerged).
+horizon-rust/horizon#12259, merged).
 
 So the bundle pinned `horizon_revision` to `aa13a46`, J5Casey/horizon
 `braid/dev`: Horizon with #12259 (and the Braid pack's other unmerged engine
@@ -51,9 +51,10 @@ stamped and #12259 is merged: remove the pin from `horizon-mixin.toml` and the
 api crate's `rev`, and add `"hooks": <the API that stamps the last of them>` to
 `horizon-native.json` in `tools/package.py`.
 
-It now pins `bc3dcdd`, J5Casey/horizon `braid/dev6`: the Braid pack's one
-engine (dev3, the recipe viewer API and slot roles), so every Braid mod pins
-the same commit and the launcher builds them together.
+#12259 and the Braid pack's other engine PRs have since merged, so it now pins
+`a3bf653`, horizon-rust/horizon main of 2026-11-09 (after `bc3dcdd`, J5Casey/horizon
+`braid/dev6`). Every Braid mod pins that same commit, so the launcher builds them
+together. The pin stays until the fragments above are stamped.
 
 `player_break_block` fires `destroy_block` again for each block it breaks, as
 any player's break does. Ultimine holds a guard (`engine/reentry.rs`) while it
