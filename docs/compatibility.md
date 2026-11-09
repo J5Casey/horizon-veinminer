@@ -61,6 +61,18 @@ any player's break does. Ultimine holds a guard (`engine/reentry.rs`) while it
 breaks, so those nested hooks pass the break through and never start another
 Ultimine use (`tests/reentry.rs`).
 
+## Checked in game
+
+### On horizon-rust/horizon main a3bf653
+
+On a performance build of horizon-rust/horizon main `a3bf653` (`native-a3bf653-972955c733c3`, built by the stock
+launcher 0.2.58) with Braid's nine mods as `tools/braid_mods.py` packages them, single player, survival, offscreen
+through horizon-ctl, a copy of the "Braid Void Fishing" world (2026-11-09):
+
+- holding the key over 18 iron ore drew the rim around all of them, the targeted block included, with
+  `Ultimine: Shapeless (18)` on the HUD;
+- a break with the key held broke all 18 through `player_break_block` (the iron pickaxe at 18 damage).
+
 ## Not yet validated
 
 The engine is unit-tested and the trait mod type-checks against the pinned
