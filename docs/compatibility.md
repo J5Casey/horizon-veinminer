@@ -51,7 +51,7 @@ stamped and #12259 is merged: remove the pin from `horizon-mixin.toml` and the
 api crate's `rev`, and add `"hooks": <the API that stamps the last of them>` to
 `horizon-native.json` in `tools/package.py`.
 
-It now pins `30c7c35`, J5Casey/horizon `braid/dev5`: the Braid pack's one
+It now pins `bc3dcdd`, J5Casey/horizon `braid/dev6`: the Braid pack's one
 engine (dev3, the recipe viewer API and slot roles), so every Braid mod pins
 the same commit and the launcher builds them together.
 
