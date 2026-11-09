@@ -20,6 +20,6 @@ player-break = []
 [dependencies]
 # The launcher points this at the Horizon source it builds the game from. Any
 # other dependency must be a crate and version in Horizon's Cargo.lock.
-horizon-client = { git = "https://github.com/horizon-rust/horizon", rev = "aa13a463daa10939b4e537a4b9dcca8c18da240f" }
+horizon-client = { git = "https://github.com/horizon-rust/horizon", rev = "30c7c35db15d7d4d433cc8016d4c5bdc74bb5d90" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
