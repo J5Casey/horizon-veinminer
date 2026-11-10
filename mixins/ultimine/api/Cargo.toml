@@ -11,9 +11,11 @@ path = "src/lib.rs"
 
 [features]
 # Breaking as the player through `Host::player_break_block`
-# (horizon-rust/horizon#12259, not merged yet: the bundle pins a Horizon commit
-# that has it). Turning it off builds the interim break path in
-# src/player_break.rs, for a Horizon without the helper.
+# (horizon-rust/horizon#12259) and, for a vein's drops gathered at the origin,
+# `Host::player_break_block_kept` and `Host::pop_break_drops` (J5Casey/horizon
+# braid/dev12, not upstream yet: the bundle pins a Horizon commit that has
+# them). Turning it off builds the interim break path in src/player_break.rs,
+# for a Horizon without the helpers.
 default = ["player-break"]
 player-break = []
 

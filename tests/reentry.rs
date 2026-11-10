@@ -56,6 +56,7 @@ impl Breaker for Vein {
         self.destroy_block_hook();
         self.blocks.remove(&pos).is_some()
     }
+    fn drop_gathered(&mut self, _origin: Pos) {}
     fn exhaust(&mut self, _amount: f32) {}
 }
 

@@ -4,7 +4,7 @@ use crate::engine::matcher::Tags;
 use crate::engine::rightclick::{Action, Farmer};
 use crate::engine::select::World;
 use crate::engine::server::Breaker;
-use crate::player_break::BREAK;
+use crate::player_break::{BREAK, Gathered};
 use horizon_client::mod_api::Host;
 
 /// Block reads (`Host::block`: air where nothing is loaded, so unloaded
@@ -26,11 +26,24 @@ impl Tags for HostTags<'_> {
     }
 }
 
-/// The acting player breaking blocks.
+/// The acting player breaking blocks. Their drops and experience are
+/// gathered and set down at the origin when the use ends.
 pub struct HostBreaker<'a> {
     pub host: &'a mut dyn Host,
     pub uuid: u128,
     pub into_inventory: bool,
+    gathered: Gathered,
+}
+
+impl<'a> HostBreaker<'a> {
+    pub fn new(host: &'a mut dyn Host, uuid: u128, into_inventory: bool) -> Self {
+        HostBreaker {
+            host,
+            uuid,
+            into_inventory,
+            gathered: Gathered::default(),
+        }
+    }
 }
 
 impl Breaker for HostBreaker<'_> {
@@ -44,7 +57,11 @@ impl Breaker for HostBreaker<'_> {
         self.host.player_food(self.uuid).map(|(food, _, _)| food)
     }
     fn break_block(&mut self, pos: Pos) -> bool {
-        BREAK.break_block(self.host, self.uuid, pos, self.into_inventory)
+        BREAK.break_gathering(self.host, self.uuid, pos, &mut self.gathered)
+    }
+    fn drop_gathered(&mut self, origin: Pos) {
+        let gathered = std::mem::take(&mut self.gathered);
+        BREAK.drop_gathered(self.host, self.uuid, origin, gathered, self.into_inventory);
     }
     fn exhaust(&mut self, amount: f32) {
         exhaust(self.host, self.uuid, amount);

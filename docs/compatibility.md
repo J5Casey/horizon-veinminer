@@ -13,7 +13,7 @@
 | `max_blocks` 64, `exhaustion_per_block` 20, cooldown, `require_tool` | Yes |
 | Hardness check (no obsidian behind stone) | Approximated: a list of hard blocks is never taken by any-block matching |
 | Stop when the tool breaks or the player starves | Yes |
-| Drops accumulated at the origin | Drops pop at each block, or go to the inventory (`drops_to_inventory`) |
+| Drops accumulated at the origin | Yes, merged, with the ore experience; or to the inventory first (`drops_to_inventory`) |
 | Right click: strip, path, till, harvest crops | Yes; copper scraping and FTB EZ Crystals are not |
 | `excluded_blocks` / `block_whitelist` tags | `excluded_blocks` / `only_blocks` lists |
 | Experience cost per block, FTB Ranks, attributes | No |
@@ -42,7 +42,10 @@ Helpers still in pending fragments (no API number yet): `sneaking` and
 (`player_status`), `default_state` (`default_state`), and for the interim break
 `equipment` (`host_bridge`) and `destroy_block` (`machine_breaking`); with
 `player-break` (the default), `player_break_block` (`player_break`,
-horizon-rust/horizon#12259, merged).
+horizon-rust/horizon#12259, merged), and `player_break_block_kept`,
+`pop_break_drops` and `give_stack` (98) for the drops gathered at the origin
+(`player_break_drops`, J5Casey/horizon `braid/dev12` 2044c58, not upstream
+yet: the pin needs that commit or a later one with it).
 
 So the bundle pinned `horizon_revision` to `aa13a46`, J5Casey/horizon
 `braid/dev`: Horizon with #12259 (and the Braid pack's other unmerged engine

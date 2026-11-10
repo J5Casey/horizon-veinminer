@@ -177,13 +177,17 @@ pub fn look_face(facing: Face, pitch: f32) -> Face {
 }
 
 /// The game calls the loop makes. `break_block` is the player's own break
-/// (loot with their tool, durability, XP, statistics, hooks).
+/// (loot with their tool, durability, XP, statistics, hooks), whose drops
+/// and experience the breaker may gather instead of letting them land.
 pub trait Breaker {
     fn block(&self, pos: Pos) -> Option<String>;
     /// The main hand's item id.
     fn held(&self) -> Option<String>;
     fn food(&self) -> Option<i32>;
     fn break_block(&mut self, pos: Pos) -> bool;
+    /// The use is over: what the breaks gathered goes down at `origin`, the
+    /// block the player mined, together (FTB Ultimine's accumulated drops).
+    fn drop_gathered(&mut self, origin: Pos);
     fn exhaust(&mut self, amount: f32);
 }
 
@@ -243,6 +247,9 @@ pub fn execute(
             report.stopped = true;
             break;
         }
+    }
+    if let Some(origin) = selection.positions.first() {
+        breaker.drop_gathered(*origin);
     }
     report
 }

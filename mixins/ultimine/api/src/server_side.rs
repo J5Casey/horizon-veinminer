@@ -147,11 +147,7 @@ impl ServerSide {
             return false;
         };
         let creative = actor.mode == GameMode::Creative;
-        let mut breaker = HostBreaker {
-            host,
-            uuid: actor.uuid,
-            into_inventory: rules.drops_to_inventory,
-        };
+        let mut breaker = HostBreaker::new(host, actor.uuid, rules.drops_to_inventory);
         let report = execute(&mut breaker, &selection, &rules, creative);
         drop(guard);
         if !creative && report.broken > 0 {

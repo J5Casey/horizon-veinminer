@@ -22,8 +22,10 @@ that will break are outlined, and an overlay names the shape and the count.
 - **Right click** with the key held: axes strip, shovels make paths, hoes till,
   and ripe crops are harvested and replanted (one seed each).
 - **Costs and limits** follow Ultimine's defaults: 64 blocks, 20 hunger per block
-  (0.1 exhaustion), stop when the tool breaks or food runs out. Drops can go
-  straight to the inventory.
+  (0.1 exhaustion), stop when the tool breaks or food runs out. A vein's drops
+  and ore experience land together at the block you mined, merged into as few
+  stacks as fit, as in FTB Ultimine; or they go straight to the inventory, with
+  what doesn't fit landing there.
 - **Multiplayer**: the client sends its key state and shape; the server decides
   and breaks. Works in single player, on LAN and on dedicated servers.
 

@@ -25,6 +25,10 @@ struct Game {
     side_effect: Option<(Pos, Pos, String)>,
     ages: BTreeMap<Pos, u8>,
     applied: Vec<(Pos, Action)>,
+    /// Each broken block's drop, held back until the use ends.
+    gathered: Vec<String>,
+    /// Where each set-down went, and what it held.
+    landed: Vec<(Pos, Vec<String>)>,
 }
 
 impl Game {
@@ -41,8 +45,11 @@ impl Game {
         }
     }
     fn select(&self, shape: ShapeId, rules: &Rules) -> Selection {
+        self.select_from([0, 0, 0], shape, rules)
+    }
+    fn select_from(&self, origin: Pos, shape: ShapeId, rules: &Rules) -> Selection {
         let req = Request {
-            origin: [0, 0, 0],
+            origin,
             face: Face::Up,
             facing: Face::North,
             shape,
@@ -74,9 +81,13 @@ impl Breaker for Game {
     }
     fn break_block(&mut self, pos: Pos) -> bool {
         self.calls.push(pos);
-        if self.fail.contains(&pos) || self.blocks.remove(&pos).is_none() {
+        if self.fail.contains(&pos) {
             return false;
         }
+        let Some(block) = self.blocks.remove(&pos) else {
+            return false;
+        };
+        self.gathered.push(block.replace("_ore", "_drop"));
         if let Some((when, other, name)) = self.side_effect.clone()
             && when == pos
         {
@@ -89,6 +100,10 @@ impl Breaker for Game {
             }
         }
         true
+    }
+    fn drop_gathered(&mut self, origin: Pos) {
+        self.landed
+            .push((origin, std::mem::take(&mut self.gathered)));
     }
     fn exhaust(&mut self, amount: f32) {
         self.exhaustion += amount;
@@ -116,6 +131,28 @@ fn breaks_every_selected_block_once_with_ultimines_hunger_cost() {
     assert_eq!(g.calls, line(5));
     assert!(g.blocks.is_empty());
     assert!((g.exhaustion - 0.5).abs() < 1e-5);
+}
+
+#[test]
+fn a_veins_drops_land_together_at_the_mined_block_once_it_ends() {
+    let mut g = Game::ore(&line(5));
+    let rules = Rules::default();
+    let sel = g.select_from([2, 0, 0], ShapeId::Shapeless, &rules);
+    assert_eq!(execute(&mut g, &sel, &rules, false).broken, 5);
+    assert_eq!(
+        g.landed,
+        [([2, 0, 0], vec!["minecraft:iron_drop".to_string(); 5])]
+    );
+
+    // Stopped early (the tool broke after two): what broke still lands there.
+    let mut g = Game::ore(&line(5));
+    g.durability = Some(2);
+    let sel = g.select_from([2, 0, 0], ShapeId::Shapeless, &rules);
+    assert!(execute(&mut g, &sel, &rules, false).stopped);
+    assert_eq!(
+        g.landed,
+        [([2, 0, 0], vec!["minecraft:iron_drop".to_string(); 2])]
+    );
 }
 
 #[test]

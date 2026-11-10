@@ -66,6 +66,13 @@ Horizon (horizon-rust/horizon#12259). The api crate's default feature
 `player-break` uses it; without the feature it builds an interim break
 (`Host::destroy_block`, a machine break with the held tool's loot: no tool wear,
 statistics or drops-to-inventory) for a Horizon that lacks the helper.
+Vein mining breaks with `Host::player_break_block_kept(uuid, pos)` instead,
+which keeps each block's drops and experience for the mod; when the use ends
+(`Breaker::drop_gathered`) they go down at the origin with
+`Host::pop_break_drops`, merged, after `give_stack` takes what fits with
+`drops_to_inventory` (J5Casey/horizon `braid/dev12`, not upstream yet).
+Right-click harvesting still uses `player_break_block`, so a crop's drops land
+where it grew. The interim break leaves every drop at its block.
 `player_break_block` fires `destroy_block` for each block it breaks, so Ultimine
 holds `engine::reentry::Guard` while it breaks and its hooks pass those breaks
 through.
