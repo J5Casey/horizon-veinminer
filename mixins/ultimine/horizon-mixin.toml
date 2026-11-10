@@ -7,8 +7,8 @@ id = "ultimine"
 version = "0.4.2"
 
 [compatibility]
-# Pinned to J5Casey braid/template-fishing-rod (a3bf653 + arismoko/horizon#2588) until that fix reaches upstream.
-horizon_revision = "b756be188fbd1d486aa73aaa028b205ffa89d1b8"
+# Pinned to J5Casey braid/dev7 (a3bf653 + arismoko/horizon#2588 + the panel_style Classic PR) until those reach upstream.
+horizon_revision = "2a7cd670294f69c572008bf37a7bfaf97626b011"
 
 [api]
 path = "api"
