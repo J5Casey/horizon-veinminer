@@ -1,0 +1,27 @@
+# The mod's engine (src/engine/, no Horizon types) built on its own, so its
+# tests (tests/ and the engine's own test modules) run with plain
+# `cargo test` and no SDK. Not part of the .hmod.
+[package]
+name = "ultimine-engine"
+version = "0.5.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+publish = false
+
+[lib]
+path = "../src/engine/mod.rs"
+
+[[test]]
+name = "mining"
+path = "../tests/mining.rs"
+
+[[test]]
+name = "reentry"
+path = "../tests/reentry.rs"
+
+[[test]]
+name = "shapes"
+path = "../tests/shapes.rs"
+
+[workspace]

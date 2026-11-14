@@ -3,12 +3,10 @@
 //! are the player's own (how Ultimine is activated and shown).
 use super::matcher::Group;
 use super::shape::ShapeId;
-use serde::{Deserialize, Serialize};
 
 pub const MAX_BLOCKS_LIMIT: usize = 4096;
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Rules {
     /// Most blocks one use breaks, the broken block included.
     pub max_blocks: usize,
@@ -122,16 +120,6 @@ fn id_valid(id: &str) -> bool {
 }
 
 impl Rules {
-    pub fn from_json(text: &str) -> Result<Self, String> {
-        let rules: Rules = serde_json::from_str(text).map_err(|e| e.to_string())?;
-        rules.validate()?;
-        Ok(rules)
-    }
-
-    pub fn to_json(&self) -> String {
-        serde_json::to_string_pretty(self).unwrap_or_default()
-    }
-
     /// Fails closed: an unusable file disables nothing silently, it is refused.
     pub fn validate(&self) -> Result<(), String> {
         if !(1..=MAX_BLOCKS_LIMIT).contains(&self.max_blocks) {
@@ -207,8 +195,7 @@ impl Rules {
 }
 
 /// How the player turns Ultimine on.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Activation {
     /// While the Ultimine key is held (Ultimine's behaviour).
     #[default]
@@ -243,8 +230,7 @@ impl Activation {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ClientPrefs {
     pub activation: Activation,
     pub shape: ShapeId,
@@ -268,17 +254,6 @@ impl Default for ClientPrefs {
     }
 }
 
-impl ClientPrefs {
-    /// Never fails: an unreadable file means the defaults.
-    pub fn from_json(text: &str) -> Self {
-        serde_json::from_str(text).unwrap_or_default()
-    }
-
-    pub fn to_json(&self) -> String {
-        serde_json::to_string_pretty(self).unwrap_or_default()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -292,27 +267,48 @@ mod tests {
         assert!(rules.shaped_any_block);
         assert_eq!(rules.shapes, ShapeId::ALL.to_vec());
         rules.validate().unwrap();
-        assert_eq!(Rules::from_json(&rules.to_json()).unwrap(), rules);
-        assert_eq!(Rules::from_json("{}").unwrap(), rules);
     }
 
     #[test]
     fn bad_rules_fail_closed() {
-        for text in [
-            r#"{"max_blocks":0}"#,
-            r#"{"max_blocks":100000}"#,
-            r#"{"exhaustion_per_block":-1}"#,
-            r#"{"shapes":[]}"#,
-            r#"{"shapes":["round"]}"#,
-            r#"{"excluded_blocks":["stone"]}"#,
-            r##"{"merge_groups":[["#Bad:tag"]]}"##,
-            r#"{"unknown":1}"#,
-            "not json",
-        ] {
-            assert!(Rules::from_json(text).is_err(), "{text}");
+        let bad = [
+            Rules {
+                max_blocks: 0,
+                ..Rules::default()
+            },
+            Rules {
+                max_blocks: 100_000,
+                ..Rules::default()
+            },
+            Rules {
+                exhaustion_per_block: -1.0,
+                ..Rules::default()
+            },
+            Rules {
+                shapes: Vec::new(),
+                ..Rules::default()
+            },
+            Rules {
+                excluded_blocks: vec!["stone".into()],
+                ..Rules::default()
+            },
+            Rules {
+                merge_groups: vec![vec!["#Bad:tag".into()]],
+                ..Rules::default()
+            },
+        ];
+        for rules in bad {
+            assert!(rules.validate().is_err(), "{rules:?}");
         }
-        Rules::from_json(r##"{"merge_groups":[["#c:ores/iron","minecraft:raw_iron_block"]]}"##)
-            .unwrap();
+        Rules {
+            merge_groups: vec![vec![
+                "#c:ores/iron".into(),
+                "minecraft:raw_iron_block".into(),
+            ]],
+            ..Rules::default()
+        }
+        .validate()
+        .unwrap();
     }
 
     #[test]
@@ -342,6 +338,5 @@ mod tests {
         assert!(Activation::Sneak.active(false, true));
         assert!(!Activation::KeyAndSneak.active(true, false));
         assert!(Activation::KeyAndSneak.active(true, true));
-        assert_eq!(ClientPrefs::from_json("garbage"), ClientPrefs::default());
     }
 }

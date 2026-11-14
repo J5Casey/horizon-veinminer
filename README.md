@@ -1,13 +1,11 @@
 # Ultimine for Horizon
 
 An [FTB Ultimine](https://github.com/FTBTeam/FTB-Ultimine)-style vein miner for
-[Horizon](https://github.com/horizon-rust/horizon) (Minecraft 26.3 in Rust), as a
-native **trait mod**: it uses only Horizon's catalog hooks and `Host` helpers, no
-injections into private game functions.
+[Horizon](https://github.com/arismoko/horizon) (Minecraft 26.3 in Rust), as a
+native mod on the mod API alone: no injections into private game functions.
 
-Hold the Ultimine key (default <kbd>`</kbd>, rebindable under Options > Mods >
-Ultimine) and break a block: everything the current shape selects breaks with it,
-as you, with your tool. Scroll while holding the key to change shape. The blocks
+Hold the Ultimine key (default <kbd>`</kbd>, rebindable under
+Controls) and break a block: everything the current shape selects breaks with it, as you, with your tool. Scroll while holding the key to change shape. The blocks
 that will break are outlined, and an overlay names the shape and the count.
 
 - **Shapes** (Ultimine's six, in its order): Shapeless (follows the vein, the
@@ -31,24 +29,21 @@ that will break are outlined, and an overlay names the shape and the count.
 
 ## Build and install
 
-The mod is the bundle in [`mixins/ultimine/`](mixins/ultimine). Package it:
-
-```sh
-python3 tools/package.py   # writes target/ultimine-0.4.2.hnmod
-```
-
-Install the `.hnmod` with a launcher that supports native mods (Settings > Game >
-Native mods), then build. Turn it off or on any time in Options > Mods.
+A native mod for [arismoko/horizon](https://github.com/arismoko/horizon): the
+flat layout (`horizon-mod.toml`, `Cargo.toml`, `src/`, `assets/`) that the
+Horizon Fork Launcher compiles against the prebuilt SDK of the commit
+`horizon-mod.toml` pins. Pack it into a `.hmod` (Braid's `tools/braid_mods.py
+--fork` does) and build with `horizon-fork-launcher native-build
+--trust-native-code`. Settings are under Options > Mods > Ultimine, the key
+under Controls.
 
 ## Development
 
 ```sh
-cargo test                                  # the engine, without the game
+(cd engine && cargo test && cargo clippy --all-targets -- -D warnings)  # the engine, without the game
+# The mod against the SDK: link a checkout of the pinned commit first.
+mkdir -p .horizon/sdk && ln -s <horizon checkout> .horizon/sdk/api
 cargo clippy --all-targets -- -D warnings
-python3 tools/test_package.py
-# Type-check the trait mod against a Horizon tree, staged as the launcher does:
-git -C ../horizon archive <rev> | tar -x -C target/horizon-src
-python3 tools/check_api.py target/horizon-src [--clippy] [--features player-break]
 ```
 
 See [architecture](docs/architecture.md) and

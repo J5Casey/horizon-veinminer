@@ -1,12 +1,9 @@
 //! Block positions and faces, with checked arithmetic so a selection near the
 //! integer limits never wraps around to the far side of the world.
-use serde::{Deserialize, Serialize};
-
 pub type Pos = [i32; 3];
 
 /// One of a block's six faces, named as vanilla's `Direction`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Face {
     Down,
     Up,

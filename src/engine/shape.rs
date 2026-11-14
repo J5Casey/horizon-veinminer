@@ -3,14 +3,10 @@
 //! that says whether a position may join. The geometry follows Ultimine's
 //! observable behaviour (its README and in-game results); the code is ours.
 use super::geom::{self, Axis, Face, Pos};
-use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, VecDeque};
 
 /// The shapes, in Ultimine's registration (and cycling) order.
-#[derive(
-    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
-)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ShapeId {
     #[default]
     Shapeless,
@@ -40,6 +36,16 @@ impl ShapeId {
             ShapeId::MiningTunnel => "mining_tunnel",
             ShapeId::EscapeTunnel => "escape_tunnel",
         }
+    }
+
+    /// The shape named `key` (as [`ShapeId::key`] writes it).
+    pub fn from_key(key: &str) -> Option<ShapeId> {
+        ShapeId::ALL.into_iter().find(|s| s.key() == key)
+    }
+
+    /// The shape's place in [`ShapeId::ALL`].
+    pub fn index(self) -> usize {
+        ShapeId::ALL.iter().position(|s| *s == self).unwrap_or(0)
     }
 
     pub fn label(self) -> &'static str {

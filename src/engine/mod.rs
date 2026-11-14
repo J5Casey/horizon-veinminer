@@ -1,7 +1,7 @@
 //! Ultimine's engine: shapes, matching, selection, the client and server
 //! state machines and the break loop. It knows nothing of Horizon: the
-//! `[api]` crate's glue implements its small traits with Horizon's stable
-//! hooks and helpers, and the repository's root crate builds these same
+//! mod crate's glue implements its small traits with the mod API's
+//! hooks and handles, and `engine/Cargo.toml` builds these same
 //! files on their own so `cargo test` runs without the game.
 #![forbid(unsafe_code)]
 
