@@ -118,42 +118,45 @@ pub fn merge(host: &dyn Host, stacks: Vec<ItemStack>) -> Vec<ItemStack> {
 /// The main inventory's slots (`inventory_tick`'s 0..36, the hotbar first).
 const INVENTORY_SLOTS: i32 = 36;
 
+/// `player`'s main inventory, slot by slot (`player_inventory` lists only
+/// the non-empty stacks, without their slots).
+fn inventory(host: &mut dyn ServerHost, player: u128) -> Vec<Option<ItemStack>> {
+    (0..INVENTORY_SLOTS)
+        .map(|slot| {
+            ItemPlace::PlayerSlot { player, slot }
+                .stack(host)
+                .filter(|s| s.count() > 0)
+        })
+        .collect()
+}
+
 /// Puts `stack` into `player`'s main inventory as `Inventory.add` does: onto
 /// stacks of the same item first, then into empty slots. What went in.
 fn insert(host: &mut dyn ServerHost, player: PlayerRef, stack: &ItemStack) -> u32 {
-    let Some(inventory) = player.inventory(host) else {
-        return 0;
-    };
+    let uuid = player.uuid();
+    let slots = inventory(host, uuid);
     let max = host.max_stack_size(stack.item()).unwrap_or(64);
     let resource = ItemResource::of(stack);
-    let uuid = player.uuid();
-    let slots = |same: bool| -> Vec<(i32, u32)> {
-        (0..INVENTORY_SLOTS)
-            .filter_map(|slot| {
-                let held = inventory.get(slot as usize);
-                let empty = held.is_none_or(|s| s.count() == 0);
-                match (same, held) {
-                    (true, Some(s)) if !empty && s.is_stackable_with(stack) => {
-                        Some((slot, max.saturating_sub(s.count())))
-                    }
-                    (false, _) if empty => Some((slot, max)),
-                    _ => None,
-                }
-            })
-            .collect()
-    };
-    let mut places = slots(true);
-    places.extend(slots(false));
+    let same = slots.iter().enumerate().filter_map(|(slot, held)| {
+        let held = held.as_ref().filter(|s| s.is_stackable_with(stack))?;
+        Some((slot, max.saturating_sub(held.count())))
+    });
+    let empty = slots
+        .iter()
+        .enumerate()
+        .filter(|(_, held)| held.is_none())
+        .map(|(slot, _)| (slot, max));
+    let places: Vec<(usize, u32)> = same.chain(empty).collect();
     let mut left = stack.count();
     for (slot, room) in places {
-        if left == 0 {
-            break;
-        }
         let amount = room.min(left);
         if amount == 0 {
             continue;
         }
-        let place = ItemPlace::PlayerSlot { player: uuid, slot };
+        let place = ItemPlace::PlayerSlot {
+            player: uuid,
+            slot: slot as i32,
+        };
         let went = host
             .transaction(|host, tx| Ok::<_, ()>(place.insert(host, tx, &resource, amount)))
             .unwrap_or(0);
@@ -176,6 +179,11 @@ pub fn set_down(
     for mut stack in merge(host, kept.stacks) {
         if into_inventory {
             let went = insert(host, player, &stack);
+            eprintln!(
+                "ultimine-debug: insert {} went {went} inv {:?}",
+                stack.count(),
+                player.inventory(host).map(|i| i.len())
+            );
             if went >= stack.count() || stack.set_count(stack.count() - went).is_err() {
                 continue;
             }
@@ -223,19 +231,15 @@ impl HostFarmer<'_> {
     /// Takes one `item` from the player's main inventory; false when they
     /// have none.
     fn take_one(&mut self, item: &str) -> bool {
-        let Some(inventory) = self.player.inventory(self.host) else {
-            return false;
-        };
-        let Some((slot, stack)) = inventory
-            .iter()
-            .take(INVENTORY_SLOTS as usize)
-            .enumerate()
-            .find(|(_, s)| s.count() > 0 && s.item().id(self.host) == item)
-        else {
+        let uuid = self.player.uuid();
+        let slots = inventory(self.host, uuid);
+        let Some((slot, stack)) = slots.iter().enumerate().find_map(|(slot, s)| {
+            Some((slot, s.as_ref()?)).filter(|(_, s)| s.item().id(self.host) == item)
+        }) else {
             return false;
         };
         let place = ItemPlace::PlayerSlot {
-            player: self.player.uuid(),
+            player: uuid,
             slot: slot as i32,
         };
         let resource = ItemResource::of(stack);
