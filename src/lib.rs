@@ -7,7 +7,7 @@
 //! (`break_block`, `left_click_block`, `right_click_block`) return before
 //! taking the lock while those breaks run; `block_drops`, which those breaks
 //! fire, keeps the vein's drops in `gather`, under a lock of its own.
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 
 mod client_side;
 pub mod engine;
