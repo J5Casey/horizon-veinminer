@@ -179,11 +179,6 @@ pub fn set_down(
     for mut stack in merge(host, kept.stacks) {
         if into_inventory {
             let went = insert(host, player, &stack);
-            eprintln!(
-                "ultimine-debug: insert {} went {went} inv {:?}",
-                stack.count(),
-                player.inventory(host).map(|i| i.len())
-            );
             if went >= stack.count() || stack.set_count(stack.count() - went).is_err() {
                 continue;
             }

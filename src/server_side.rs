@@ -72,12 +72,6 @@ impl ServerSide {
             return;
         }
         let rules = read_rules(host);
-        eprintln!(
-            "ultimine-debug: tick {} drops_to_inventory {} raw {:?}",
-            self.now,
-            rules.drops_to_inventory,
-            host.setting(MOD_ID, "drops_to_inventory")
-        );
         if self.rules.as_ref() == Some(&rules) {
             return;
         }

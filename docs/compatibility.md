@@ -60,8 +60,19 @@ Ultimine use (`tests/reentry.rs`).
 
 ## Checked in game
 
-See the commit that adds this port's in-game check, and the history for the
-horizon-rust era checks (0.4.x on `a3bf653`).
+### On arismoko/horizon (J5Casey braid/ari-base 24715f9)
+
+Native build `native-24715f9-…` from the source-built fork launcher, offline developer single player,
+survival, offscreen through horizon-ctl, a copy of "Ex Ouk Onton" (2026-11-13), the key bound to G:
+
+- holding the key over 12 iron ore and 2 deepslate iron ore drew the rims on all 14 and
+  `Ultimine: Shapeless (14)` with the shape menu;
+- a break broke all 14 (the iron pickaxe at 14 damage) and one stack of 14 raw iron popped at the
+  first block; 6 coal ore gave one stack of 6 coal there and their experience (+7 points);
+- with `drops_to_inventory` on, 12 raw iron went into the inventory; with room for only 4, those 4
+  went in and the other 8 landed at the first block.
+
+The horizon-rust era checks (0.4.x on `a3bf653`) are in the history.
 
 ## Not yet validated
 
