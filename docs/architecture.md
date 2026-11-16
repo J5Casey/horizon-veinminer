@@ -41,7 +41,8 @@ for `cargo test`, and as `mod-ultimine`'s `engine` module in the game.
   `ultimine:state` (client to server) and `ultimine:rules` (server to client),
   size-checked. No serde: a native mod gets only the SDK.
 - `config`, `page`: the rules and preferences, and the typed settings that hold
-  them (Options > Mods > Ultimine).
+  them (Options > Mods > Ultimine); `config` also reads and writes the rules
+  file (`ultimine-server.json`) through `json`, a small JSON reader.
 
 ## Glue
 

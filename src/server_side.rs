@@ -1,6 +1,6 @@
 //! The server half's hooks: player state from clients, the rules, and the
 //! authoritative selection and breaking on `break_block`.
-use crate::engine::config::Rules;
+use crate::engine::config::{LIST_KEYS, Rules};
 use crate::engine::geom::{Face, Pos};
 use crate::engine::page::{self, Value};
 use crate::engine::protocol::{self, MOD_ID};
@@ -23,9 +23,29 @@ pub fn breaking() -> bool {
     crate::engine::reentry::active()
 }
 
-/// The rules as this game's settings hold them (the page edits these).
-pub fn read_rules(host: &dyn Host) -> Rules {
-    page::read(&|key| setting(host, key)).1
+/// The rules file: `serverconfig/ultimine-server.json` in the world, else
+/// `config/ultimine-server.json` (a `Server` config).
+pub const RULES_FILE: &str = "ultimine-server.json";
+
+/// The rules file a new game writes: the custom block lists, as Ultimine
+/// 0.4's `rules` setting spelled them.
+pub fn default_rules_file() -> String {
+    Rules::default().to_json(&LIST_KEYS)
+}
+
+/// The rules: this game's settings (the page edits these), then what the
+/// rules file `file` names. The page's merge groups toggle turns the file's
+/// groups off too. An invalid file is an error: Ultimine is then off.
+pub fn read_rules(host: &dyn Host, file: Option<&str>) -> Result<Rules, String> {
+    let mut rules = page::read(&|key| setting(host, key)).1;
+    let merging = !rules.merge_groups.is_empty();
+    if let Some(text) = file {
+        rules.apply_json(text)?;
+    }
+    if !merging {
+        rules.merge_groups.clear();
+    }
+    Ok(rules)
 }
 
 /// A setting's value as kept (`true`/`false` for a toggle, the option's
@@ -43,7 +63,13 @@ pub fn setting(host: &dyn Host, key: &str) -> Option<Value> {
 #[derive(Default)]
 pub struct ServerSide {
     engine: Server,
+    /// The rules file's text, once the game read it.
+    file: Option<String>,
+    /// The rules last read: None before the first read and while the rules
+    /// file is invalid (Ultimine is then off: it fails closed).
     rules: Option<Rules>,
+    /// The rules file's error, reported once.
+    error: Option<String>,
     now: u64,
     /// The last right click handled per player, so the off hand's turn of
     /// the same click doesn't act again.
@@ -62,22 +88,48 @@ fn send_rules(host: &mut dyn ServerHost, uuid: u128, rules: &Rules) {
 }
 
 impl ServerSide {
-    fn rules(&mut self, host: &dyn Host) -> Rules {
-        self.rules.get_or_insert_with(|| read_rules(host)).clone()
+    /// The rules file's text, from `config_loading` and `config_reloading`;
+    /// None when the server stops (the next world reads its own).
+    pub fn set_file(&mut self, text: Option<String>) {
+        self.file = text;
+        self.error = None;
+    }
+
+    /// Reads the rules again: true when they changed.
+    fn reload(&mut self, host: &dyn Host) -> bool {
+        let rules = match read_rules(host, self.file.as_deref()) {
+            Ok(rules) => Some(rules),
+            Err(error) => {
+                if self.error.as_ref() != Some(&error) {
+                    eprintln!(
+                        "ultimine: {RULES_FILE} is invalid, Ultimine is off until it is fixed: {error}"
+                    );
+                    self.error = Some(error);
+                }
+                None
+            }
+        };
+        let changed = rules != self.rules;
+        self.rules = rules;
+        changed
+    }
+
+    fn rules(&mut self, host: &dyn Host) -> Option<Rules> {
+        if self.rules.is_none() {
+            self.reload(host);
+        }
+        self.rules.clone()
     }
 
     pub fn tick(&mut self, host: &mut dyn ServerHost) {
         self.now += 1;
-        if !self.now.is_multiple_of(RELOAD_EVERY) {
+        if !self.now.is_multiple_of(RELOAD_EVERY) || !self.reload(host) {
             return;
         }
-        let rules = read_rules(host);
-        if self.rules.as_ref() == Some(&rules) {
-            return;
-        }
-        self.rules = Some(rules.clone());
-        for uuid in self.engine.rules_changed() {
-            send_rules(host, uuid, &rules);
+        if let Some(rules) = self.rules.clone() {
+            for uuid in self.engine.rules_changed() {
+                send_rules(host, uuid, &rules);
+            }
         }
     }
 
@@ -85,7 +137,9 @@ impl ServerSide {
         let Some(state) = protocol::decode_state(data) else {
             return;
         };
-        let rules = self.rules(host);
+        let Some(rules) = self.rules(host) else {
+            return;
+        };
         if self.engine.client_state(uuid, &state, &rules) {
             send_rules(host, uuid, &rules);
         }
@@ -115,7 +169,7 @@ impl ServerSide {
         }
         let player = host.players().acting_player()?;
         let level = player.level(host)?;
-        let rules = self.rules(host);
+        let rules = self.rules(host)?;
         let [yaw, pitch] = player.entity().rotation(host).unwrap_or_default();
         let actor = Actor {
             uuid: player.uuid(),

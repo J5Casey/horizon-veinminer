@@ -24,6 +24,13 @@ that will break are outlined, and an overlay names the shape and the count.
   and ore experience land together at the block you mined, merged into as few
   stacks as fit, as in FTB Ultimine; or they go straight to the inventory, with
   what doesn't fit landing there.
+- **Custom block lists**: `config/ultimine-server.json` (or a world's
+  `serverconfig/ultimine-server.json`) holds which blocks mine together
+  (`merge_groups`, `merge_groups_shaped`: lists of block ids and `#tags`),
+  `excluded_blocks` and `only_blocks`, and may set any other rule
+  (`max_blocks`, `shapes`, `require_tool`...). It is written with the defaults
+  when missing and read again when it changes; a key it names wins over the
+  settings page. An invalid file turns Ultimine off until it is fixed.
 - **Multiplayer**: the client sends its key state and shape; the server decides
   and breaks. Works in single player, on LAN and on dedicated servers.
 
@@ -33,7 +40,7 @@ A native mod for [sunrise-org/sunrise](https://github.com/sunrise-org/sunrise): 
 flat layout (`sunrise-mod.toml`, `Cargo.toml`, `src/`, `assets/`) that the
 Sunrise launcher compiles against the prebuilt SDK of the commit
 `sunrise-mod.toml` pins. Pack it into a `.hmod` (Braid's `tools/braid_mods.py
---sunrise` does) and build with `horizon-fork-launcher native-build
+--sunrise` does) and build with `sunrise-launcher native-build
 --trust-native-code`. Settings are under Options > Mods > Ultimine, the key
 under Controls.
 

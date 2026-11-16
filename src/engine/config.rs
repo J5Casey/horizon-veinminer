@@ -1,6 +1,7 @@
 //! Settings. `Rules` are the server's (what may be mined and what it costs);
 //! the server sends them to each client so its preview matches. `ClientPrefs`
 //! are the player's own (how Ultimine is activated and shown).
+use super::json::{self, Json};
 use super::matcher::Group;
 use super::shape::ShapeId;
 
@@ -119,7 +120,186 @@ fn id_valid(id: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"/_.-".contains(&b))
 }
 
+/// The rules file's keys, in `Rules`' order: the names its fields had in
+/// Ultimine 0.4's `rules` JSON, which this file keeps.
+pub const RULE_KEYS: [&str; 16] = [
+    "max_blocks",
+    "exhaustion_per_block",
+    "cooldown_ticks",
+    "shapes",
+    "shaped_any_block",
+    "merge_groups",
+    "merge_groups_shaped",
+    "excluded_blocks",
+    "only_blocks",
+    "require_tool",
+    "drops_to_inventory",
+    "stop_on_break_fail",
+    "right_click_axe",
+    "right_click_shovel",
+    "right_click_hoe",
+    "right_click_harvest",
+];
+
+/// The keys of the custom block lists, what the default rules file holds.
+pub const LIST_KEYS: [&str; 4] = [
+    "merge_groups",
+    "merge_groups_shaped",
+    "excluded_blocks",
+    "only_blocks",
+];
+
+fn whole(key: &str, value: &Json, max: u64) -> Result<u64, String> {
+    match value {
+        Json::Number(n) if n.fract() == 0.0 && (0.0..=max as f64).contains(n) => Ok(*n as u64),
+        other => Err(format!(
+            "{key}: expected a whole number 0..={max}, got {}",
+            other.kind()
+        )),
+    }
+}
+
+fn boolean(key: &str, value: &Json) -> Result<bool, String> {
+    match value {
+        Json::Bool(b) => Ok(*b),
+        other => Err(format!(
+            "{key}: expected true or false, got {}",
+            other.kind()
+        )),
+    }
+}
+
+fn strings(key: &str, value: &Json) -> Result<Vec<String>, String> {
+    let Json::Array(items) = value else {
+        return Err(format!(
+            "{key}: expected an array of strings, got {}",
+            value.kind()
+        ));
+    };
+    items
+        .iter()
+        .map(|item| match item {
+            Json::String(s) => Ok(s.clone()),
+            other => Err(format!(
+                "{key}: expected an array of strings, got {} in it",
+                other.kind()
+            )),
+        })
+        .collect()
+}
+
+fn groups(key: &str, value: &Json) -> Result<Vec<Group>, String> {
+    let Json::Array(items) = value else {
+        return Err(format!(
+            "{key}: expected an array of arrays of strings, got {}",
+            value.kind()
+        ));
+    };
+    items.iter().map(|group| strings(key, group)).collect()
+}
+
+fn write_strings(ids: &[String]) -> String {
+    let ids: Vec<String> = ids.iter().map(|id| json::quote(id)).collect();
+    format!("[{}]", ids.join(", "))
+}
+
 impl Rules {
+    /// Sets the fields the rules file `text` names, keeping the others: the
+    /// JSON object Ultimine 0.4 kept as its `rules` setting, every key
+    /// optional. Fails closed: an unknown key, a wrong type or rules that
+    /// don't validate refuse the whole file and change nothing.
+    pub fn apply_json(&mut self, text: &str) -> Result<(), String> {
+        let Json::Object(members) = Json::parse(text)? else {
+            return Err("expected a JSON object".into());
+        };
+        let mut rules = self.clone();
+        for (key, value) in &members {
+            let key = key.as_str();
+            match key {
+                "max_blocks" => {
+                    rules.max_blocks = whole(key, value, MAX_BLOCKS_LIMIT as u64)? as usize
+                }
+                "exhaustion_per_block" => match value {
+                    Json::Number(n) => rules.exhaustion_per_block = *n as f32,
+                    other => return Err(format!("{key}: expected a number, got {}", other.kind())),
+                },
+                "cooldown_ticks" => {
+                    rules.cooldown_ticks = whole(key, value, u32::MAX.into())? as u32
+                }
+                "shapes" => {
+                    rules.shapes = strings(key, value)?
+                        .iter()
+                        .map(|s| {
+                            ShapeId::from_key(s).ok_or_else(|| format!("shapes: no shape {s:?}"))
+                        })
+                        .collect::<Result<_, _>>()?;
+                }
+                "shaped_any_block" => rules.shaped_any_block = boolean(key, value)?,
+                "merge_groups" => rules.merge_groups = groups(key, value)?,
+                "merge_groups_shaped" => rules.merge_groups_shaped = groups(key, value)?,
+                "excluded_blocks" => rules.excluded_blocks = strings(key, value)?,
+                "only_blocks" => rules.only_blocks = strings(key, value)?,
+                "require_tool" => rules.require_tool = boolean(key, value)?,
+                "drops_to_inventory" => rules.drops_to_inventory = boolean(key, value)?,
+                "stop_on_break_fail" => rules.stop_on_break_fail = boolean(key, value)?,
+                "right_click_axe" => rules.right_click_axe = boolean(key, value)?,
+                "right_click_shovel" => rules.right_click_shovel = boolean(key, value)?,
+                "right_click_hoe" => rules.right_click_hoe = boolean(key, value)?,
+                "right_click_harvest" => rules.right_click_harvest = boolean(key, value)?,
+                _ => return Err(format!("unknown key {key:?}")),
+            }
+        }
+        rules.validate()?;
+        *self = rules;
+        Ok(())
+    }
+
+    /// The fields named by `keys` (of [`RULE_KEYS`]) as a rules file, in the
+    /// format `apply_json` reads.
+    pub fn to_json(&self, keys: &[&str]) -> String {
+        let mut members = Vec::new();
+        for key in RULE_KEYS.into_iter().filter(|k| keys.contains(k)) {
+            let value = match key {
+                "max_blocks" => self.max_blocks.to_string(),
+                "exhaustion_per_block" => format!("{:?}", self.exhaustion_per_block),
+                "cooldown_ticks" => self.cooldown_ticks.to_string(),
+                "shapes" => {
+                    let shapes: Vec<String> =
+                        self.shapes.iter().map(|s| s.key().to_owned()).collect();
+                    write_strings(&shapes)
+                }
+                "shaped_any_block" => self.shaped_any_block.to_string(),
+                "merge_groups" | "merge_groups_shaped" => {
+                    let groups = if key == "merge_groups" {
+                        &self.merge_groups
+                    } else {
+                        &self.merge_groups_shaped
+                    };
+                    if groups.is_empty() {
+                        "[]".to_owned()
+                    } else {
+                        let lines: Vec<String> = groups
+                            .iter()
+                            .map(|g| format!("    {}", write_strings(g)))
+                            .collect();
+                        format!("[\n{}\n  ]", lines.join(",\n"))
+                    }
+                }
+                "excluded_blocks" => write_strings(&self.excluded_blocks),
+                "only_blocks" => write_strings(&self.only_blocks),
+                "require_tool" => self.require_tool.to_string(),
+                "drops_to_inventory" => self.drops_to_inventory.to_string(),
+                "stop_on_break_fail" => self.stop_on_break_fail.to_string(),
+                "right_click_axe" => self.right_click_axe.to_string(),
+                "right_click_shovel" => self.right_click_shovel.to_string(),
+                "right_click_hoe" => self.right_click_hoe.to_string(),
+                _ => self.right_click_harvest.to_string(),
+            };
+            members.push(format!("  {}: {value}", json::quote(key)));
+        }
+        format!("{{\n{}\n}}\n", members.join(",\n"))
+    }
+
     /// Fails closed: an unusable file disables nothing silently, it is refused.
     pub fn validate(&self) -> Result<(), String> {
         if !(1..=MAX_BLOCKS_LIMIT).contains(&self.max_blocks) {
@@ -267,6 +447,74 @@ mod tests {
         assert!(rules.shaped_any_block);
         assert_eq!(rules.shapes, ShapeId::ALL.to_vec());
         rules.validate().unwrap();
+    }
+
+    #[test]
+    fn rules_files_read_as_ultimine_0_4_wrote_them() {
+        let rules = Rules::default();
+        let mut back = Rules {
+            max_blocks: 1,
+            shapes: vec![ShapeId::SmallTunnel],
+            merge_groups: Vec::new(),
+            right_click_harvest: false,
+            ..Rules::default()
+        };
+        back.apply_json(&rules.to_json(&RULE_KEYS)).unwrap();
+        assert_eq!(back, rules);
+        let mut same = rules.clone();
+        same.apply_json("{}").unwrap();
+        assert_eq!(same, rules);
+        // A 0.4 file: the custom lists, and a field the page also sets.
+        let mut custom = Rules::default();
+        custom
+            .apply_json(
+                r##"{
+                  "max_blocks": 128,
+                  "shapes": ["shapeless", "large_tunnel"],
+                  "merge_groups": [["#c:ores/iron", "minecraft:raw_iron_block"]],
+                  "excluded_blocks": ["minecraft:spawner"],
+                  "only_blocks": []
+                }"##,
+            )
+            .unwrap();
+        assert_eq!(custom.max_blocks, 128);
+        assert_eq!(custom.shapes, [ShapeId::Shapeless, ShapeId::LargeTunnel]);
+        assert_eq!(
+            custom.merge_groups,
+            [vec![
+                "#c:ores/iron".to_owned(),
+                "minecraft:raw_iron_block".into()
+            ]]
+        );
+        assert_eq!(custom.excluded_blocks, ["minecraft:spawner"]);
+        assert_eq!(custom.exhaustion_per_block, rules.exhaustion_per_block);
+        let lists = rules.to_json(&LIST_KEYS);
+        assert!(lists.contains("\"merge_groups\": [\n    [\"minecraft:stone\""));
+        assert!(!lists.contains("max_blocks"));
+    }
+
+    #[test]
+    fn bad_rules_files_change_nothing() {
+        for text in [
+            r#"{"max_blocks":0}"#,
+            r#"{"max_blocks":100000}"#,
+            r#"{"max_blocks":1.5}"#,
+            r#"{"exhaustion_per_block":-1}"#,
+            r#"{"shapes":[]}"#,
+            r#"{"shapes":["round"]}"#,
+            r#"{"excluded_blocks":["stone"]}"#,
+            r#"{"excluded_blocks":"minecraft:stone"}"#,
+            r##"{"merge_groups":[["#Bad:tag"]]}"##,
+            r#"{"merge_groups":["minecraft:stone"]}"#,
+            r#"{"require_tool":1}"#,
+            r#"{"unknown":1}"#,
+            "[]",
+            "not json",
+        ] {
+            let mut rules = Rules::default();
+            assert!(rules.apply_json(text).is_err(), "{text}");
+            assert_eq!(rules, Rules::default(), "{text}");
+        }
     }
 
     #[test]

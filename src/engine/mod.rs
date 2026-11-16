@@ -9,6 +9,7 @@ pub mod blocks;
 pub mod client;
 pub mod config;
 pub mod geom;
+pub mod json;
 pub mod matcher;
 pub mod page;
 pub mod protocol;

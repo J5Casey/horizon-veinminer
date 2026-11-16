@@ -6,7 +6,7 @@
 # The engine's tests run without it (engine/).
 [package]
 name = "mod-ultimine"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
 license = "MIT"
 description = "Ultimine-style vein mining for Sunrise"

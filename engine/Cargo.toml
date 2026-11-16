@@ -3,7 +3,7 @@
 # `cargo test` and no SDK. Not part of the .hmod.
 [package]
 name = "ultimine-engine"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT"

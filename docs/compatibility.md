@@ -46,11 +46,22 @@ What changed in the port (0.5.0):
 
 - The settings page's custom buttons are typed settings now (toggles and
   choices, same options). The rules' hand-edited lists (`excluded_blocks`,
-  `only_blocks`, custom merge groups) had only a JSON file behind them; that
-  file is gone with serde (the launcher gives a native mod the SDK only), so
-  they keep their defaults until a config file comes back.
+  `only_blocks`, custom merge groups) live in a `Server` config file,
+  `ultimine-server.json`, in 0.4's JSON format (0.6.0, below).
 - The overlay sits top left in its own GUI layer; there is no `Corners`
   placement helper on arismoko, so it can overlap another mod's top-left text.
+
+What came back in 0.6.0: the custom block lists. The mod registers
+`ultimine-server.json` as a `Server` config (`register_configs`; read in
+`config_loading`, `config_reloading`, dropped in `config_unloading`): a world's
+`serverconfig/ultimine-server.json`, else `config/ultimine-server.json` in the
+game folder, written with the default lists when missing. It is the JSON object
+0.4 kept as its `rules` setting, every key optional, read by a small JSON reader
+of the mod's own (`src/engine/json.rs`; no serde, the launcher gives a native
+mod the SDK only). Keys it names win over the settings page, except that the
+page's "Merge groups" off turns the file's groups off too. A file that doesn't
+parse or validate turns Ultimine off on that server until it is fixed (logged
+once), as 0.4 did.
 
 `PlayerRef::destroy_block` fires `break_block` again for each block it breaks,
 as any player's break does. Ultimine holds a guard (`engine/reentry.rs`) while

@@ -19,13 +19,14 @@ use client_side::ClientSide;
 use engine::page::{self, Kind};
 use engine::protocol;
 use mod_api::{
-    BlockDropsEvent, BlockHighlightEvent, BreakBlockEvent, ClientHost, ClientTickPostEvent, Flow,
+    BlockDropsEvent, BlockHighlightEvent, BreakBlockEvent, ClientHost, ClientTickPostEvent, Config,
+    ConfigFile, ConfigKind, ConfigLoadingEvent, ConfigReloadingEvent, ConfigUnloadingEvent, Flow,
     GuiLayer, GuiLayerDrawEvent, GuiLayerPlacement, HandlerThread, Hooks, HostSide,
     IPayloadContext, IPayloadHandler, KeyRegistration, LeftClickBlockEvent, LevelHost,
     MouseScrollingEvent, PayloadBytes, PayloadDeclaration, PayloadDirection, PayloadHandleError,
-    PayloadId, PayloadProtocol, PlayerLoggedOutEvent, RegisterGuiLayersEvent, Registrar,
-    RegistrationContext, RightClickBlockEvent, ServerHost, ServerTickEvent, SettingChangedEvent,
-    SettingSpec, VisualsEvent,
+    PayloadId, PayloadProtocol, PlayerLoggedOutEvent, RegisterConfigsEvent, RegisterGuiLayersEvent,
+    Registrar, RegistrationContext, RightClickBlockEvent, ServerHost, ServerTickEvent,
+    SettingChangedEvent, SettingSpec, VisualsEvent,
 };
 use server_side::ServerSide;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -88,6 +89,13 @@ fn declaration(id: &str, direction: PayloadDirection) -> PayloadDeclaration {
     )
 }
 
+/// Whether `config` is the rules file.
+fn rules_file(config: &ConfigFile) -> bool {
+    config.mod_id == protocol::MOD_ID
+        && config.kind == ConfigKind::Server
+        && config.file == server_side::RULES_FILE
+}
+
 #[mod_api::sunrise_mod]
 impl Hooks for Ultimine {
     fn register(&self, r: &mut dyn Registrar, _cx: &RegistrationContext) {
@@ -116,6 +124,36 @@ impl Hooks for Ultimine {
             None,
             Some(Arc::new(RulesHandler(Arc::clone(&self.client)))),
         );
+    }
+
+    /// The rules file, with the custom block lists (a `Server` config).
+    fn register_configs(&self, _host: HostSide, event: &mut RegisterConfigsEvent<'_>) {
+        event.configs.push(
+            Config::new(
+                protocol::MOD_ID,
+                ConfigKind::Server,
+                &server_side::default_rules_file(),
+            )
+            .file(server_side::RULES_FILE),
+        );
+    }
+
+    fn config_loading(&self, _host: HostSide, event: &mut ConfigLoadingEvent<'_>) {
+        if rules_file(event.config) {
+            lock(&self.server).set_file(Some(event.config.text.clone()));
+        }
+    }
+
+    fn config_reloading(&self, _host: HostSide, event: &mut ConfigReloadingEvent<'_>) {
+        if rules_file(event.config) {
+            lock(&self.server).set_file(Some(event.config.text.clone()));
+        }
+    }
+
+    fn config_unloading(&self, _host: &mut dyn ServerHost, event: &mut ConfigUnloadingEvent<'_>) {
+        if rules_file(event.config) {
+            lock(&self.server).set_file(None);
+        }
     }
 
     fn register_gui_layers(
