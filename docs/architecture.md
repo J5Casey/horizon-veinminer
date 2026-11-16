@@ -1,10 +1,10 @@
 # Architecture
 
 ```
-horizon-mod.toml                 the manifest: id, [native] pins (arismoko/horizon)
-Cargo.toml                       the mod crate (depends on horizon-mod-api only)
+sunrise-mod.toml                 the manifest: id, [native] pins (sunrise-org/sunrise)
+Cargo.toml                       the mod crate (depends on sunrise-mod-api only)
 assets/ultimine/lang/            the settings page's and the key's labels
-src/engine/                      the engine: no Horizon types at all
+src/engine/                      the engine: no game types at all
 src/lib.rs                       the Hooks impl: registration, routes hooks to the halves
 src/client_side.rs               key, wheel, tick (state + preview), visuals, overlay
 src/server_side.rs               state, rules, break_block, right_click_block
@@ -56,7 +56,7 @@ The server half is authoritative. `left_click_block` records the face a dig
 started on; `break_block` (acting player from `players().acting_player()`) asks
 the engine, selects again from the server's world, and when more than one block
 is selected breaks them all, the origin first, with `PlayerRef::destroy_block`
-(arismoko/horizon#4143), then cancels the original break, as Ultimine cancels
+(sunrise-org/sunrise#4143), then cancels the original break, as Ultimine cancels
 its `BreakEvent`. Those breaks reach `break_block` again: a thread-local guard
 makes them pass through, and the server hooks check it before taking their lock.
 

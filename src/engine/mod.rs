@@ -1,5 +1,5 @@
 //! Ultimine's engine: shapes, matching, selection, the client and server
-//! state machines and the break loop. It knows nothing of Horizon: the
+//! state machines and the break loop. It knows nothing of the game: the
 //! mod crate's glue implements its small traits with the mod API's
 //! hooks and handles, and `engine/Cargo.toml` builds these same
 //! files on their own so `cargo test` runs without the game.

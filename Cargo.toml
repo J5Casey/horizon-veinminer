@@ -1,15 +1,15 @@
-# Ultimine: a native mod on the arismoko/horizon mod API. The launcher
-# compiles this crate against the prebuilt SDK of the commit horizon-mod.toml
+# Ultimine: a native mod on the Sunrise mod API. The launcher
+# compiles this crate against the prebuilt SDK of the commit sunrise-mod.toml
 # pins. The SDK dependency must be this exact path (E_SDK_SOURCE). For a local
 # developer base, link a checkout of the pin:
-#   mkdir -p .horizon/sdk && ln -s <checkout> .horizon/sdk/api
+#   mkdir -p .sunrise/sdk && ln -s <checkout> .sunrise/sdk/api
 # The engine's tests run without it (engine/).
 [package]
 name = "mod-ultimine"
 version = "0.5.0"
 edition = "2024"
 license = "MIT"
-description = "Ultimine-style vein mining for Horizon"
+description = "Ultimine-style vein mining for Sunrise"
 publish = false
 # The engine tests in tests/ belong to engine/Cargo.toml, which runs them without the SDK.
 autotests = false
@@ -18,4 +18,4 @@ autotests = false
 path = "src/lib.rs"
 
 [dependencies]
-horizon-mod-api = { path = ".horizon/sdk/api/crates/horizon-mod-api" }
+sunrise-mod-api = { path = ".sunrise/sdk/api/crates/sunrise-mod-api" }

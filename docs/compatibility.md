@@ -23,10 +23,10 @@ The client preview has no tag data: groups written as `#tags` only match on the
 server. The default groups are written out as block ids so preview and server
 agree. Right-click actions don't wear the tool.
 
-## Horizon API used (arismoko/horizon)
+## Sunrise API used
 
-Pinned in `horizon-mod.toml` to `86c2820370`, J5Casey/horizon `braid/ari-base`:
-arismoko/horizon main `b7a155fea5` + #4143 + #4252 (`fishing_medium`) + #4236 (`loot_odds`) + #4263 (recipe_book_ids) + #4276 (synced recipe ids, one book id per vanilla recipe), a local developer base frozen for the whole pack; this mod needs #4143 (`PlayerRef::destroy_block`, open). Once #4143 merges, repin to a main commit with a `prebuilt-` SDK.
+Pinned in `sunrise-mod.toml` to `74ab4c33e5`, J5Casey/sunrise `braid/sun-base`:
+sunrise-org/sunrise main `d1dce85911` + sunrise#1390 (`loot_odds`) + sunrise#1404 (`fishing_medium`), a local developer base frozen for the whole pack. Sunrise's mod API is arismoko's renamed; the port changed names only.
 
 Hooks: `register` (settings, key mapping, payloads), `register_gui_layers`,
 `gui_layer_draw`, `setting_changed`, `client_tick_post`, `mouse_scrolling`,

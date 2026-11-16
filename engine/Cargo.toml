@@ -1,4 +1,4 @@
-# The mod's engine (src/engine/, no Horizon types) built on its own, so its
+# The mod's engine (src/engine/, no game types) built on its own, so its
 # tests (tests/ and the engine's own test modules) run with plain
 # `cargo test` and no SDK. Not part of the .hmod.
 [package]

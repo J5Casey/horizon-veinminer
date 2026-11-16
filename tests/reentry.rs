@@ -1,4 +1,4 @@
-//! Horizon's player break fires `destroy_block` again for each block Ultimine
+//! the game's player break fires `destroy_block` again for each block Ultimine
 //! breaks. The guard makes those breaks pass through instead of starting
 //! another Ultimine use.
 use std::collections::BTreeMap;

@@ -1,4 +1,4 @@
-//! What the engine knows about blocks by name alone. Horizon's stable helpers
+//! What the engine knows about blocks by name alone. the game's stable helpers
 //! name blocks (`minecraft:stone`) but don't expose hardness or block
 //! classes, so the few facts the selection needs are kept here as small,
 //! explicit lists rather than guessed.

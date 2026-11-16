@@ -1,7 +1,7 @@
-# Ultimine for Horizon
+# Ultimine for Sunrise
 
 An [FTB Ultimine](https://github.com/FTBTeam/FTB-Ultimine)-style vein miner for
-[Horizon](https://github.com/arismoko/horizon) (Minecraft 26.3 in Rust), as a
+[Horizon](https://github.com/sunrise-org/sunrise) (Minecraft 26.3 in Rust), as a
 native mod on the mod API alone: no injections into private game functions.
 
 Hold the Ultimine key (default <kbd>`</kbd>, rebindable under
@@ -29,11 +29,11 @@ that will break are outlined, and an overlay names the shape and the count.
 
 ## Build and install
 
-A native mod for [arismoko/horizon](https://github.com/arismoko/horizon): the
-flat layout (`horizon-mod.toml`, `Cargo.toml`, `src/`, `assets/`) that the
-Horizon Fork Launcher compiles against the prebuilt SDK of the commit
-`horizon-mod.toml` pins. Pack it into a `.hmod` (Braid's `tools/braid_mods.py
---fork` does) and build with `horizon-fork-launcher native-build
+A native mod for [sunrise-org/sunrise](https://github.com/sunrise-org/sunrise): the
+flat layout (`sunrise-mod.toml`, `Cargo.toml`, `src/`, `assets/`) that the
+Sunrise launcher compiles against the prebuilt SDK of the commit
+`sunrise-mod.toml` pins. Pack it into a `.hmod` (Braid's `tools/braid_mods.py
+--sunrise` does) and build with `horizon-fork-launcher native-build
 --trust-native-code`. Settings are under Options > Mods > Ultimine, the key
 under Controls.
 
@@ -42,7 +42,7 @@ under Controls.
 ```sh
 (cd engine && cargo test && cargo clippy --all-targets -- -D warnings)  # the engine, without the game
 # The mod against the SDK: link a checkout of the pinned commit first.
-mkdir -p .horizon/sdk && ln -s <horizon checkout> .horizon/sdk/api
+mkdir -p .sunrise/sdk && ln -s <sunrise checkout> .sunrise/sdk/api
 cargo clippy --all-targets -- -D warnings
 ```
 

@@ -1,6 +1,6 @@
 target/
 __pycache__/
 *.pyc
-.horizon/
+.sunrise/
 # The SDK-resolved lock of local checks; the mod has no registry dependencies to pin.
 /Cargo.lock

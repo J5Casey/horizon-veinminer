@@ -1,6 +1,6 @@
 //! The settings page (Options > Mods > Ultimine): one typed setting per
 //! option, a toggle or a choice. The activation key is listed in Controls by
-//! Horizon itself. The page edits this game's own settings: the player's
+//! the game itself. The page edits this game's own settings: the player's
 //! preferences, and the rules of the worlds it hosts (single player and
 //! LAN). A dedicated server keeps its rules in its own data folder.
 //!

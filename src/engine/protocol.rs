@@ -1,4 +1,4 @@
-//! Mod messages between the client and server halves (Horizon's registered
+//! Mod messages between the client and server halves (the game's registered
 //! payloads, `ultimine:*` ids). Plain text, versioned, size-checked; the
 //! server treats everything a client sends as untrusted input.
 //!

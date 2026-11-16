@@ -1,5 +1,5 @@
-//! Ultimine for Horizon: an FTB Ultimine-style vein miner as a native mod on
-//! the mod API (`horizon-mod-api`, lib `mod_api`).
+//! Ultimine for Sunrise: an FTB Ultimine-style vein miner as a native mod on
+//! the mod API (`sunrise-mod-api`, lib `mod_api`).
 //!
 //! One instance serves the window's game and the server's (single player
 //! runs both), so the two halves keep their state apart behind locks. The
@@ -22,10 +22,10 @@ use mod_api::{
     BlockDropsEvent, BlockHighlightEvent, BreakBlockEvent, ClientHost, ClientTickPostEvent, Flow,
     GuiLayer, GuiLayerDrawEvent, GuiLayerPlacement, HandlerThread, Hooks, HostSide,
     IPayloadContext, IPayloadHandler, KeyRegistration, LeftClickBlockEvent, LevelHost,
-    MouseScrollingEvent, PayloadBytes, PayloadDeclaration, PayloadDirection, PayloadId,
-    PayloadProtocol, PlayerLoggedOutEvent, RegisterGuiLayersEvent, Registrar, RegistrationContext,
-    RightClickBlockEvent, ServerHost, ServerTickEvent, SettingChangedEvent, SettingSpec,
-    VisualsEvent,
+    MouseScrollingEvent, PayloadBytes, PayloadDeclaration, PayloadDirection, PayloadHandleError,
+    PayloadId, PayloadProtocol, PlayerLoggedOutEvent, RegisterGuiLayersEvent, Registrar,
+    RegistrationContext, RightClickBlockEvent, ServerHost, ServerTickEvent, SettingChangedEvent,
+    SettingSpec, VisualsEvent,
 };
 use server_side::ServerSide;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -40,6 +40,11 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+/// A payload callback's failure (Sunrise's handlers return `PayloadHandleError`, not a bare string).
+fn failed(e: impl std::fmt::Debug) -> PayloadHandleError {
+    PayloadHandleError::Failed(format!("{e:?}"))
+}
+
 /// A client's state, on the server.
 struct StateHandler(Arc<Mutex<ServerSide>>);
 
@@ -48,9 +53,9 @@ impl IPayloadHandler for StateHandler {
         &self,
         payload: PayloadBytes,
         context: &mut dyn IPayloadContext,
-    ) -> Result<(), String> {
-        let player = context.player().map_err(|e| format!("{e:?}"))?;
-        let host = context.server_host().map_err(|e| format!("{e:?}"))?;
+    ) -> Result<(), PayloadHandleError> {
+        let player = context.player().map_err(failed)?;
+        let host = context.server_host().map_err(failed)?;
         lock(&self.0).client_message(host, player.uuid(), &payload.0);
         Ok(())
     }
@@ -64,8 +69,8 @@ impl IPayloadHandler for RulesHandler {
         &self,
         payload: PayloadBytes,
         context: &mut dyn IPayloadContext,
-    ) -> Result<(), String> {
-        let host = context.client_host().map_err(|e| format!("{e:?}"))?;
+    ) -> Result<(), PayloadHandleError> {
+        let host = context.client_host().map_err(failed)?;
         lock(&self.0).server_message(host, &payload.0);
         Ok(())
     }
@@ -83,7 +88,7 @@ fn declaration(id: &str, direction: PayloadDirection) -> PayloadDeclaration {
     )
 }
 
-#[mod_api::horizon_mod]
+#[mod_api::sunrise_mod]
 impl Hooks for Ultimine {
     fn register(&self, r: &mut dyn Registrar, _cx: &RegistrationContext) {
         for setting in page::settings() {

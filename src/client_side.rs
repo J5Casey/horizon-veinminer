@@ -15,7 +15,7 @@ pub const KEY: &str = "activate";
 pub const DEFAULT_KEY: &str = "key.keyboard.grave.accent";
 /// The HUD overlay's GUI layer.
 pub const LAYER: &str = "ultimine:overlay";
-/// Horizon's budget of outlined blocks per mod and frame.
+/// the game's budget of outlined blocks per mod and frame.
 const RIM_BUDGET: usize = 256;
 
 #[derive(Default)]
