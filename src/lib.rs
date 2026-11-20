@@ -23,10 +23,10 @@ use mod_api::{
     ConfigFile, ConfigKind, ConfigLoadingEvent, ConfigReloadingEvent, ConfigUnloadingEvent, Flow,
     GuiLayer, GuiLayerDrawEvent, GuiLayerPlacement, HandlerThread, Hooks, HostSide,
     IPayloadContext, IPayloadHandler, KeyRegistration, LeftClickBlockEvent, LevelHost,
-    MouseScrollingEvent, PayloadBytes, PayloadDeclaration, PayloadDirection, PayloadHandleError,
-    PayloadId, PayloadProtocol, PlayerLoggedOutEvent, RegisterConfigsEvent, RegisterGuiLayersEvent,
-    Registrar, RegistrationContext, RightClickBlockEvent, ServerHost, ServerTickEvent,
-    SettingChangedEvent, SettingSpec, VisualsEvent,
+    MouseScrollingEvent, PayloadBytes, PayloadDeclaration, PayloadDelivery, PayloadDirection,
+    PayloadHandleError, PayloadId, PayloadProtocol, PlayerLoggedOutEvent, RegisterConfigsEvent,
+    RegisterGuiLayersEvent, Registrar, RegistrationContext, RightClickBlockEvent, ServerHost,
+    ServerTickEvent, SettingChangedEvent, SettingSpec, VisualsEvent,
 };
 use server_side::ServerSide;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -86,6 +86,7 @@ fn declaration(id: &str, direction: PayloadDirection) -> PayloadDeclaration {
         direction,
         true,
         HandlerThread::Main,
+        PayloadDelivery::Reliable,
     )
 }
 
@@ -98,7 +99,7 @@ fn rules_file(config: &ConfigFile) -> bool {
 
 #[mod_api::sunrise_mod]
 impl Hooks for Ultimine {
-    fn register(&self, r: &mut dyn Registrar, _cx: &RegistrationContext) {
+    fn register(&self, r: &mut dyn Registrar, cx: &RegistrationContext) {
         for setting in page::settings() {
             let spec = match setting.kind {
                 Kind::Toggle(default) => SettingSpec::toggle(setting.key, setting.label, default),
@@ -107,7 +108,7 @@ impl Hooks for Ultimine {
                 }
             };
             if let Err(e) = r.register_setting(spec) {
-                r.registration_refusal(format!("a setting: {e}"));
+                cx.refuse(&format!("a setting: {e}"));
             }
         }
         r.register_key_mapping(
